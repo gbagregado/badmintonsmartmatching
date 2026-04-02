@@ -35,6 +35,38 @@ const DB = (() => {
 
   function save(data) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // Schedule cloud sync (debounced)
+    scheduleSync();
+  }
+
+  let _syncTimer = null;
+  function scheduleSync() {
+    if (_syncTimer) clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(() => {
+      if (typeof Cloud !== 'undefined' && Cloud.isConnected()) {
+        Cloud.pushAll(load()).then(ok => {
+          if (ok) console.log('[DB] Synced to cloud');
+        });
+      }
+    }, 500);
+  }
+
+  // Pull from cloud and merge into local (cloud wins)
+  async function syncFromCloud() {
+    if (typeof Cloud === 'undefined' || !Cloud.isConnected()) return false;
+    const remote = await Cloud.pullAll();
+    if (!remote) return false;
+    const merged = {
+      ...structuredClone(DEFAULT_DATA),
+      settings: { ...structuredClone(DEFAULT_DATA).settings, ...remote.settings },
+      players: remote.players,
+      courts: remote.courts,
+      queue: remote.queue,
+      activeMatches: remote.activeMatches,
+      matches: remote.matches,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    return true;
   }
 
   function get() {
@@ -261,6 +293,6 @@ const DB = (() => {
     initCourts, getAvailableCourts,
     createMatch, finishMatch,
     exportData, importData, resetAll,
-    updateSettings,
+    updateSettings, syncFromCloud,
   };
 })();

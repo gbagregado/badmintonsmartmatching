@@ -472,6 +472,26 @@ input[type="range"]::-webkit-slider-thumb {
 .mb-16 { margin-bottom: 16px; }
 .flex-gap { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* ── Sync Badge ───────────────────────────────────── */
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: .78rem;
+  font-weight: 600;
+  transition: all .3s;
+}
+.sync-badge.online {
+  background: rgba(0, 184, 148, .15);
+  color: var(--success);
+}
+.sync-badge.offline {
+  background: rgba(138, 143, 168, .1);
+  color: var(--text-muted);
+}
+
 /* ── Responsive ───────────────────────────────────── */
 @media (max-width: 600px) {
   .tab-panel { padding: 16px; }

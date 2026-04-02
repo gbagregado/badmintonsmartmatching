@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 
@@ -15,6 +16,9 @@
     <div>
       <h1>🏸 Badminton Queue</h1>
       <span class="subtitle">Smart court allocation & matchmaking</span>
+    </div>
+    <div style="margin-left:auto">
+      <span id="sync-badge" class="sync-badge offline">💾 Local Only</span>
     </div>
   </header>
 
@@ -149,6 +153,17 @@
     </div>
 
     <div class="settings-section">
+      <h4>☁️ Cloud Sync (Supabase)</h4>
+      <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:12px">
+        Real-time sync across devices. Data is stored in Supabase and syncs automatically.
+      </p>
+      <div class="flex-gap">
+        <button class="btn btn-primary btn-sm" onclick="App.pushToCloud()">⬆️ Push to Cloud</button>
+        <button class="btn btn-outline btn-sm" onclick="App.pullFromCloud()">⬇️ Pull from Cloud</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <h4>Data Management</h4>
       <div class="flex-gap mt-16">
         <button class="btn btn-outline btn-sm" onclick="App.exportData()">📥 Export Backup</button>
@@ -188,6 +203,7 @@
 
   <!-- ═══ Scripts ═══ -->
   <script src="js/storage.js"></script>
+  <script src="js/cloud.js"></script>
   <script src="js/matchmaker.js"></script>
   <script src="js/seed.js"></script>
   <script src="js/app.js"></script>

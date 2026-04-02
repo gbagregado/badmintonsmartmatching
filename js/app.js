@@ -6,7 +6,31 @@ const App = (() => {
   let currentTab = 'dashboard';
 
   // ── Initialization ───────────────────────────────────
-  function init() {
+  async function init() {
+    // Initialize Cloud (Supabase) if available
+    if (typeof Cloud !== 'undefined') {
+      Cloud.init();
+      // Wait a moment for connection test
+      await new Promise(r => setTimeout(r, 300));
+
+      if (Cloud.isConnected()) {
+        // Try pulling from cloud first
+        const pulled = await DB.syncFromCloud();
+        if (pulled) {
+          console.log('[App] Loaded data from Supabase');
+        }
+        // Subscribe to real-time changes
+        Cloud.onChange(async (table) => {
+          console.log(`[App] Real-time update on: ${table}`);
+          await DB.syncFromCloud();
+          render();
+          updateSyncBadge(true);
+        });
+        Cloud.subscribe();
+      }
+      updateSyncBadge(Cloud.isConnected());
+    }
+
     const db = DB.get();
     // Initialize courts if not set
     if (db.courts.length === 0) {
@@ -19,6 +43,18 @@ const App = (() => {
     bindEvents();
     switchTab('dashboard');
     render();
+  }
+
+  function updateSyncBadge(isOnline) {
+    const badge = document.getElementById('sync-badge');
+    if (!badge) return;
+    if (isOnline) {
+      badge.className = 'sync-badge online';
+      badge.textContent = '☁️ Synced';
+    } else {
+      badge.className = 'sync-badge offline';
+      badge.textContent = '💾 Local Only';
+    }
   }
 
   // ── Navigation ───────────────────────────────────────
@@ -402,6 +438,34 @@ const App = (() => {
     render();
   }
 
+  async function pushToCloud() {
+    if (typeof Cloud === 'undefined' || !Cloud.isConnected()) {
+      return toast('Not connected to Supabase', 'warning');
+    }
+    toast('Pushing to cloud...', 'info');
+    const ok = await Cloud.pushAll(DB.get());
+    if (ok) {
+      toast('All data pushed to cloud!', 'success');
+      updateSyncBadge(true);
+    } else {
+      toast('Push failed — check console', 'error');
+    }
+  }
+
+  async function pullFromCloud() {
+    if (typeof Cloud === 'undefined' || !Cloud.isConnected()) {
+      return toast('Not connected to Supabase', 'warning');
+    }
+    toast('Pulling from cloud...', 'info');
+    const ok = await DB.syncFromCloud();
+    if (ok) {
+      toast('Data loaded from cloud!', 'success');
+      render();
+    } else {
+      toast('Pull failed — check console', 'error');
+    }
+  }
+
   // ── Event Binding ────────────────────────────────────
   function bindEvents() {
     // Tab navigation
@@ -466,6 +530,7 @@ const App = (() => {
     enqueuePlayer, dequeuePlayer, enqueueAll, clearQueue, moveInQueue,
     autoAssign, openScoreDialog, submitScore, closeScoreDialog,
     saveSettings, exportData, importData, resetData, requeueFinished,
+    pushToCloud, pullFromCloud,
   };
 })();
 
