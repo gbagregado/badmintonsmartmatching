@@ -12,6 +12,10 @@ const App = (() => {
     if (db.courts.length === 0) {
       DB.initCourts(db.settings.courtCount);
     }
+    // Auto-seed demo data on first run
+    if (db.players.length === 0 && typeof Seed !== 'undefined') {
+      Seed.run();
+    }
     bindEvents();
     switchTab('dashboard');
     render();
