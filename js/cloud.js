@@ -223,7 +223,7 @@ const Cloud = (() => {
     if (error) { console.error('[Cloud] getSettings:', error); return null; }
     const settings = {};
     for (const row of data) {
-      settings[row.key] = JSON.parse(row.value);
+      settings[row.key] = row.value;
     }
     return settings;
   }
@@ -231,7 +231,7 @@ const Cloud = (() => {
   async function updateSettings(changes) {
     if (!isConnected()) return false;
     for (const [key, value] of Object.entries(changes)) {
-      await supabase.from('settings').upsert({ key, value: JSON.stringify(value) });
+      await supabase.from('settings').upsert({ key, value });
     }
     return true;
   }
