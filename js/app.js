@@ -940,49 +940,87 @@ const App = (() => {
 
   // ── Join Requests ─────────────────────────────────────────
   async function refreshJoinRequests() {
-    if (!Cloud.isConnected()) {
-      toast('No cloud connection', 'warning');
-      return;
-    }
-    const requests = await Cloud.getJoinRequests('pending');
-    const badge = document.getElementById('requests-badge');
+    if (!Cloud.isConnected()) return;
+    const [regRequests, queueRequests] = await Promise.all([
+      Cloud.getJoinRequests('pending', 'registration'),
+      Cloud.getJoinRequests('pending', 'queue_join'),
+    ]);
+    const totalPending = regRequests.length + queueRequests.length;
+    const badge     = document.getElementById('requests-badge');
     const countBadge = document.getElementById('requests-count-badge');
-    const panel = document.getElementById('join-requests-panel');
-    const list = document.getElementById('join-requests-list');
+    const panel     = document.getElementById('join-requests-panel');
+    const list      = document.getElementById('join-requests-list');
 
-    if (badge) { badge.textContent = requests.length; badge.style.display = requests.length > 0 ? 'flex' : 'none'; }
-    if (countBadge) countBadge.textContent = requests.length;
-    if (panel) panel.style.display = 'block';
-
-    if (!list) return;
-    if (requests.length === 0) {
-      list.innerHTML = '<div class="empty-state">No pending requests.</div>';
-      return;
-    }
+    if (badge)      { badge.textContent = totalPending; badge.style.display = totalPending > 0 ? 'flex' : 'none'; }
+    if (countBadge) countBadge.textContent = totalPending;
+    if (panel)      panel.style.display = 'block';
+    if (!list)      return;
 
     const db = DB.get();
-    list.innerHTML = requests.map(req => {
-      const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      return `<div class="join-request-card" id="req-${req.id}">
-        <div class="join-req-info">
-          <div class="join-req-name">${esc(req.display_name)}</div>
-          <div class="join-req-meta">
-            Level: <strong>${esc(req.skill_level)}</strong>
-            ${req.gender ? ` · ${esc(req.gender)}` : ''}
-            ${req.contact ? ` · ${esc(req.contact)}` : ''}
-            · ${time}
+    let html = '';
+
+    // ── Queue join requests ──────────────────────────────
+    if (queueRequests.length > 0) {
+      html += `<div class="req-section-label">📋 Queue Requests</div>`;
+      html += queueRequests.map(req => {
+        const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const alreadyInQueue = db.queue.some(q => q.id === req.player_id);
+        return `<div class="join-request-card queue-req-card" id="req-${req.id}">
+          <div class="join-req-info">
+            <div class="join-req-name">${esc(req.display_name)}</div>
+            <div class="join-req-meta">Level: <strong>${esc(req.skill_level)}</strong> · ${time}</div>
           </div>
-        </div>
-        <div class="join-req-actions">
-          <select id="link-player-${req.id}" class="join-req-player-select">
-            <option value="">— New player —</option>
-            ${db.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
-          </select>
-          <button class="btn btn-xs btn-success" onclick="App.approveJoinRequest('${req.id}', '${esc(req.display_name)}', '${esc(req.skill_level)}')">✓ Approve</button>
-          <button class="btn btn-xs btn-danger"  onclick="App.rejectJoinRequest('${req.id}')">✕</button>
-        </div>
-      </div>`;
-    }).join('');
+          <div class="join-req-actions">
+            ${alreadyInQueue
+              ? `<span style="color:var(--text-muted);font-size:.78rem">Already in queue</span>`
+              : `<button class="btn btn-xs btn-success" onclick="App.addPlayerToQueue('${req.id}','${req.player_id}','${esc(req.display_name)}')">+ Add to Queue</button>`}
+            <button class="btn btn-xs btn-danger" onclick="App.rejectJoinRequest('${req.id}')">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Registration requests ────────────────────────────
+    if (regRequests.length > 0) {
+      html += `<div class="req-section-label" style="margin-top:${queueRequests.length ? 14 : 0}px">👤 Registration Requests</div>`;
+      html += regRequests.map(req => {
+        const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        return `<div class="join-request-card" id="req-${req.id}">
+          <div class="join-req-info">
+            <div class="join-req-name">${esc(req.display_name)}</div>
+            <div class="join-req-meta">
+              Level: <strong>${esc(req.skill_level)}</strong>
+              ${req.gender ? ` · ${esc(req.gender)}` : ''}
+              ${req.contact ? ` · ${esc(req.contact)}` : ''}
+              · ${time}
+            </div>
+          </div>
+          <div class="join-req-actions">
+            <select id="link-player-${req.id}" class="join-req-player-select">
+              <option value="">— New player —</option>
+              ${db.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+            </select>
+            <button class="btn btn-xs btn-success" onclick="App.approveJoinRequest('${req.id}','${esc(req.display_name)}','${esc(req.skill_level)}')">✓ Approve</button>
+            <button class="btn btn-xs btn-danger"  onclick="App.rejectJoinRequest('${req.id}')">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    list.innerHTML = html || '<div class="empty-state">No pending requests.</div>';
+  }
+
+  async function addPlayerToQueue(requestId, playerId, displayName) {
+    if (!playerId) return toast('Player not linked', 'warning');
+    DB.enqueue(playerId);
+    await Cloud.approveJoinRequest(requestId, playerId);
+    if (Cloud.isConnected()) {
+      const db = DB.get();
+      await Cloud.setQueue(db.queue);
+    }
+    document.getElementById(`req-${requestId}`)?.remove();
+    toast(`${displayName} added to queue!`, 'success');
+    render();
   }
 
   async function approveJoinRequest(requestId, displayName, skillLevel) {
@@ -1227,7 +1265,7 @@ const App = (() => {
     confirmManualMatch, closeAnalysisDialog,
     switchHistoryView,
     showQRCode, closeQRCode,
-    refreshJoinRequests, approveJoinRequest, rejectJoinRequest,
+    refreshJoinRequests, approveJoinRequest, rejectJoinRequest, addPlayerToQueue,
     saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,

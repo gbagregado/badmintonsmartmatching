@@ -402,11 +402,12 @@ const Cloud = (() => {
   }
 
   // ── Join Requests ─────────────────────────────────────────
-  async function getJoinRequests(status = 'pending') {
+  async function getJoinRequests(status = 'pending', type = 'registration') {
     if (!isConnected()) return [];
     const { data } = await supabase.from('join_requests')
       .select('*')
       .eq('status', status)
+      .eq('type', type)
       .order('created_at', { ascending: true });
     return data || [];
   }

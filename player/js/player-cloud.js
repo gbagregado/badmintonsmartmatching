@@ -38,6 +38,26 @@ const PlayerCloud = (() => {
       gender: profile.gender || null,
       weight_kg: profile.weightKg || null,
       status: 'pending',
+      type: 'registration',
+    }).select().single();
+    return { data, error };
+  }
+
+  async function submitQueueRequest(deviceId, playerId, displayName, skillLevel) {
+    if (!ready()) return { error: 'Offline' };
+    // Remove any previous pending queue request from this device first
+    await sb.from('join_requests')
+      .delete()
+      .eq('device_id', deviceId)
+      .eq('type', 'queue_join')
+      .eq('status', 'pending');
+    const { data, error } = await sb.from('join_requests').insert({
+      device_id: deviceId,
+      player_id: playerId,
+      display_name: displayName,
+      skill_level: skillLevel,
+      status: 'pending',
+      type: 'queue_join',
     }).select().single();
     return { data, error };
   }
@@ -47,8 +67,20 @@ const PlayerCloud = (() => {
     const { data } = await sb.from('join_requests')
       .select('*')
       .eq('device_id', deviceId)
+      .eq('type', 'registration')
       .order('created_at', { ascending: false })
       .limit(1)
+      .maybeSingle();
+    return data;
+  }
+
+  async function getMyQueueRequest(deviceId) {
+    if (!ready()) return null;
+    const { data } = await sb.from('join_requests')
+      .select('*')
+      .eq('device_id', deviceId)
+      .eq('type', 'queue_join')
+      .eq('status', 'pending')
       .maybeSingle();
     return data;
   }
@@ -138,13 +170,24 @@ const PlayerCloud = (() => {
       .subscribe();
   }
 
+  function subscribeQueueRequest(deviceId, callback) {
+    if (!ready()) return null;
+    return sb.channel('player-qrequest-' + deviceId)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'join_requests',
+        filter: `device_id=eq.${deviceId}`,
+      }, callback)
+      .subscribe();
+  }
+
   return {
     init, ready,
     getLinkedPlayerId, linkDevice,
     submitJoinRequest, getMyRequest,
+    submitQueueRequest, getMyQueueRequest,
     getPlayer, getAllPlayers,
     getQueue, getActiveMatches, getPlayerMatches, getCompletedMatchCount,
     getRatingHistory,
-    subscribeQueue, subscribeMatches, subscribeJoinRequest,
+    subscribeQueue, subscribeMatches, subscribeJoinRequest, subscribeQueueRequest,
   };
 })();

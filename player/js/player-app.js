@@ -278,9 +278,15 @@ const PlayerApp = (() => {
   }
 
   // ── Queue Tab ─────────────────────────────────────────────
-  function renderQueueTab() {
+  async function renderQueueTab() {
     const el = document.getElementById('tab-queue');
     if (!el || currentTab !== 'queue') return;
+
+    // Check if player has a pending queue request
+    let pendingQueueReq = null;
+    if (linkedId && PlayerCloud.ready()) {
+      pendingQueueReq = await PlayerCloud.getMyQueueRequest(deviceId);
+    }
 
     const myPos = linkedId ? queueRows.findIndex(r => r.player_id === linkedId) : -1;
     const inQueue = myPos !== -1;
@@ -366,11 +372,13 @@ const PlayerApp = (() => {
         </div>
 
         <div class="action-row">
-          ${!inQueue && !inMatch
-            ? `<button class="btn-action btn-join" onclick="PlayerApp.requestJoinQueue()">✋ Request to Join Queue</button>`
-            : inQueue
-              ? `<button class="btn-action btn-leave" onclick="PlayerApp.requestLeaveQueue()">🚪 Request to Leave Queue</button>`
-              : ''}
+          ${pendingQueueReq
+            ? `<div class="pending-queue-notice">⏳ Queue request sent — waiting for queue master…</div>`
+            : !inQueue && !inMatch
+              ? `<button class="btn-action btn-join" onclick="PlayerApp.requestJoinQueue()">✋ Request to Join Queue</button>`
+              : inQueue
+                ? `<button class="btn-action btn-leave" onclick="PlayerApp.requestLeaveQueue()">🚪 Request to Leave Queue</button>`
+                : ''}
         </div>
       </div>`;
   }
@@ -401,16 +409,49 @@ const PlayerApp = (() => {
       return;
     }
     if (!linkedId) {
-      alert('Your account is not linked yet. Wait for the queue master to approve your request, or ask them to add you.');
+      alert('Your account is not linked yet. Wait for the queue master to approve your registration first.');
       return;
     }
-    alert('Request sent! The queue master will add you to the queue.');
-    // In a full implementation this would insert a queue_request row
-    // For now the QM adds them manually via the approval flow
+    // Check already in queue
+    const alreadyInQueue = queueRows.some(r => r.player_id === linkedId);
+    if (alreadyInQueue) {
+      alert('You are already in the queue!');
+      return;
+    }
+    const p = playerData;
+    PlayerCloud.submitQueueRequest(deviceId, linkedId, profile.displayName, p?.skill_level || profile.skillLevel)
+      .then(({ error }) => {
+        if (error) {
+          alert('Failed to send request. Please try again.');
+          return;
+        }
+        renderQueueTab();
+        // Show pending state
+        toast('Request sent! Waiting for queue master to add you.');
+      });
   }
 
-  function requestLeaveQueue() {
-    alert('Please ask the queue master to remove you from the queue.');
+  function toast(msg) {
+    // Simple in-app toast
+    let el = document.getElementById('player-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'player-toast';
+      el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1a1a2e;border:1px solid rgba(78,205,196,.4);color:#e8eaf6;padding:10px 18px;border-radius:20px;font-size:.85rem;font-weight:600;z-index:999;pointer-events:none;transition:opacity .3s';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  }
+
+  async function requestLeaveQueue() {
+    if (!linkedId) return;
+    if (!confirm('Request to leave the queue?')) return;
+    // Insert a leave request — QM handles the actual dequeue
+    await PlayerCloud.submitQueueRequest(deviceId, linkedId, profile.displayName, playerData?.skill_level || profile.skillLevel);
+    toast('Leave request sent to queue master.');
   }
 
   // ── Stats Tab ─────────────────────────────────────────────

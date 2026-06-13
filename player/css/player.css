@@ -296,4 +296,8 @@ strong { color: var(--text); }
 .profile-row { display: flex; justify-content: space-between; font-size: .85rem; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .profile-row:last-child { border-bottom: none; }
 .profile-row span:first-child { color: var(--text-muted); }
-.device-id { font-size: .72rem; font-family: monospace; color: var(--text-muted); }
+.pending-queue-notice {
+  padding: 14px; border-radius: 10px; text-align: center;
+  background: rgba(253,203,110,.1); border: 1px solid rgba(253,203,110,.3);
+  color: var(--warning); font-size: .88rem; font-weight: 600;
+}
