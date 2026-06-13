@@ -21,6 +21,7 @@ const DB = (() => {
     matches: [],     // match history
     activeMatches: [],
     payments: [],    // { id, playerId, matchId, amount, type: 'charge'|'payment', createdAt, note }
+    matchAnalyses: [], // { id, matchId, source, createdAt, courtId, teamA, teamB, teamAAvg, teamBAvg, ratingGap, quality, flags, teamAPlayers, teamBPlayers, courtName }
   };
 
   function load() {
@@ -67,7 +68,8 @@ const DB = (() => {
       queue: remote.queue,
       activeMatches: remote.activeMatches,
       matches: remote.matches,
-      payments: local.payments, // payments have no cloud table — must not be wiped on sync
+      payments: local.payments,       // payments have no cloud table — must not be wiped on sync
+      matchAnalyses: local.matchAnalyses || [], // analyses are local-only
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     return true;
@@ -338,6 +340,13 @@ const DB = (() => {
     return balance; // positive = owes money, negative = overpaid
   }
 
+  function saveMatchAnalysis(entry) {
+    return update(db => {
+      if (!db.matchAnalyses) db.matchAnalyses = [];
+      db.matchAnalyses.unshift(entry); // newest first
+    });
+  }
+
   function clearPlayerBalance(playerId) {
     return update(db => {
       const balance = getPlayerBalance(playerId, db);
@@ -363,6 +372,7 @@ const DB = (() => {
     exportData, importData, resetAll,
     updateSettings, syncFromCloud,
     chargeMatch, recordPayment, getPlayerBalance, clearPlayerBalance,
+    saveMatchAnalysis,
     LEVELS, LEVEL_RATINGS,
   };
 })();

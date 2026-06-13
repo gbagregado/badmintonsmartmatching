@@ -162,8 +162,15 @@
 
   <!-- ═══ History ═══ -->
   <section id="tab-history" class="tab-panel">
-    <h3 class="mb-16">Match History</h3>
+    <div class="section-header">
+      <h3>Match History</h3>
+      <div class="flex-gap">
+        <button class="hist-toggle-btn active" data-view="results" onclick="App.switchHistoryView('results')">Results</button>
+        <button class="hist-toggle-btn" data-view="analysis" onclick="App.switchHistoryView('analysis')">&#128202; Analysis Log</button>
+      </div>
+    </div>
     <div id="history-list"></div>
+    <div id="analysis-log" style="display:none"></div>
   </section>
 
   <!-- ═══ Payments ═══ -->
