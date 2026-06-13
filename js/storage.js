@@ -58,6 +58,7 @@ const DB = (() => {
     if (typeof Cloud === 'undefined' || !Cloud.isConnected()) return false;
     const remote = await Cloud.pullAll();
     if (!remote) return false;
+    const local = load(); // preserve local-only data not stored in cloud
     const merged = {
       ...structuredClone(DEFAULT_DATA),
       settings: { ...structuredClone(DEFAULT_DATA).settings, ...remote.settings },
@@ -66,6 +67,7 @@ const DB = (() => {
       queue: remote.queue,
       activeMatches: remote.activeMatches,
       matches: remote.matches,
+      payments: local.payments, // payments have no cloud table — must not be wiped on sync
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     return true;
