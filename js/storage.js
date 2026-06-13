@@ -13,12 +13,14 @@ const DB = (() => {
       challengeFactor: 0.15, // 0 = perfect balance, 1 = max challenge
       maxPointsPerSet: 21,
       setsToWin: 1,
+      shuttleCost: 5.00, // cost per shuttle (split among players in the match)
     },
     players: [],
     courts: [],
     queue: [],       // player IDs in queue order
     matches: [],     // match history
     activeMatches: [],
+    payments: [],    // { id, playerId, matchId, amount, type: 'charge'|'payment', createdAt, note }
   };
 
   function load() {
@@ -81,13 +83,17 @@ const DB = (() => {
   }
 
   // ── Players ──────────────────────────────────────────
+  // Official badminton levels: A+ (highest) down to G (lowest)
+  const LEVELS = ['A+','A','B+','B','C+','C','D+','D','E+','E','F+','F','G'];
+  const LEVEL_RATINGS = {
+    'A+': 2000, 'A': 1850, 'B+': 1700, 'B': 1550,
+    'C+': 1400, 'C': 1250, 'D+': 1100, 'D': 950,
+    'E+': 800,  'E': 700,  'F+': 600,  'F': 500, 'G': 400,
+  };
+
   function addPlayer(name, skillLevel) {
     return update(db => {
-      const rating = skillLevel === 'beginner' ? 900
-        : skillLevel === 'intermediate' ? 1200
-        : skillLevel === 'advanced' ? 1500
-        : skillLevel === 'expert' ? 1800
-        : db.settings.defaultRating;
+      const rating = LEVEL_RATINGS[skillLevel] ?? db.settings.defaultRating;
 
       db.players.push({
         id: crypto.randomUUID(),
@@ -110,8 +116,7 @@ const DB = (() => {
   function removePlayer(playerId) {
     return update(db => {
       db.players = db.players.filter(p => p.id !== playerId);
-      db.queue = db.queue.filter(id => id !== playerId);
-      // Remove from active matches? No, let those finish
+      db.queue = db.queue.filter(q => q.id !== playerId);
     });
   }
 
@@ -129,15 +134,15 @@ const DB = (() => {
   // ── Queue ────────────────────────────────────────────
   function enqueue(playerId) {
     return update(db => {
-      if (!db.queue.includes(playerId)) {
-        db.queue.push(playerId);
+      if (!db.queue.some(q => q.id === playerId)) {
+        db.queue.push({ id: playerId, joinedAt: Date.now(), gamesPlayedToday: 0 });
       }
     });
   }
 
   function dequeue(playerId) {
     return update(db => {
-      db.queue = db.queue.filter(id => id !== playerId);
+      db.queue = db.queue.filter(q => q.id !== playerId);
     });
   }
 
@@ -192,7 +197,7 @@ const DB = (() => {
       }
       // Remove matched players from queue
       const allPlayers = [...teamA, ...teamB];
-      db.queue = db.queue.filter(id => !allPlayers.includes(id));
+      db.queue = db.queue.filter(q => !allPlayers.includes(q.id));
     });
     return match;
   }
@@ -286,6 +291,67 @@ const DB = (() => {
   // helpers
   function avg(arr) { return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0; }
 
+  // ── Payments ─────────────────────────────────────────
+  function chargeMatch(matchId) {
+    return update(db => {
+      const match = db.matches.find(m => m.id === matchId) || db.activeMatches.find(m => m.id === matchId);
+      if (!match) return;
+      const allPlayers = [...match.teamA, ...match.teamB];
+      const cost = db.settings.shuttleCost;
+      for (const pid of allPlayers) {
+        db.payments.push({
+          id: crypto.randomUUID(),
+          playerId: pid,
+          matchId: match.id,
+          amount: cost,
+          type: 'charge',
+          createdAt: Date.now(),
+          note: 'Shuttle fee',
+        });
+      }
+    });
+  }
+
+  function recordPayment(playerId, amount, note) {
+    return update(db => {
+      db.payments.push({
+        id: crypto.randomUUID(),
+        playerId,
+        matchId: null,
+        amount,
+        type: 'payment',
+        createdAt: Date.now(),
+        note: note || 'Payment received',
+      });
+    });
+  }
+
+  function getPlayerBalance(playerId, db) {
+    let balance = 0;
+    for (const p of db.payments) {
+      if (p.playerId !== playerId) continue;
+      if (p.type === 'charge') balance += p.amount;
+      else if (p.type === 'payment') balance -= p.amount;
+    }
+    return balance; // positive = owes money, negative = overpaid
+  }
+
+  function clearPlayerBalance(playerId) {
+    return update(db => {
+      const balance = getPlayerBalance(playerId, db);
+      if (balance <= 0) return;
+      db.payments.push({
+        id: crypto.randomUUID(),
+        playerId,
+        matchId: null,
+        amount: balance,
+        type: 'payment',
+        createdAt: Date.now(),
+        note: 'Settled full balance',
+      });
+    });
+  }
+
   return {
     get, update, save,
     addPlayer, removePlayer, getPlayer, updatePlayer,
@@ -294,5 +360,7 @@ const DB = (() => {
     createMatch, finishMatch,
     exportData, importData, resetAll,
     updateSettings, syncFromCloud,
+    chargeMatch, recordPayment, getPlayerBalance, clearPlayerBalance,
+    LEVELS, LEVEL_RATINGS,
   };
 })();

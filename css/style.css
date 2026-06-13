@@ -146,7 +146,6 @@ body {
   margin: 6px 0;
   font-size: .85rem;
 }
-.court-time { color: var(--text-muted); font-size: .8rem; margin-bottom: 10px; }
 
 /* ── Tables ───────────────────────────────────────── */
 .table-wrap {
@@ -180,6 +179,42 @@ tr:hover td { background: rgba(108, 92, 231, .05); }
 .badge.playing { background: rgba(0,184,148,.15); color: var(--success); }
 .badge.queued { background: rgba(108,92,231,.15); color: var(--accent); }
 .badge.idle { background: rgba(138,143,168,.1); color: var(--text-muted); }
+
+/* Level badges */
+.level-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+.level-badge.level-Ap { background: #ff6b6b; color: #fff; }
+.level-badge.level-A  { background: #ee5a24; color: #fff; }
+.level-badge.level-Bp { background: #f0932b; color: #fff; }
+.level-badge.level-B  { background: #f6e58d; color: #333; }
+.level-badge.level-Cp { background: #badc58; color: #333; }
+.level-badge.level-C  { background: #6ab04c; color: #fff; }
+.level-badge.level-Dp { background: #22a6b3; color: #fff; }
+.level-badge.level-D  { background: #7ed6df; color: #333; }
+.level-badge.level-Ep { background: #4834d4; color: #fff; }
+.level-badge.level-E  { background: #686de0; color: #fff; }
+.level-badge.level-Fp { background: #be2edd; color: #fff; }
+.level-badge.level-F  { background: #e056fd; color: #fff; }
+.level-badge.level-G  { background: rgba(138,143,168,.2); color: var(--text-muted); }
+
+/* ── Court Timer ──────────────────────────────────── */
+.court-timer {
+  color: var(--warning);
+  font-size: .9rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 10px;
+  padding: 4px 10px;
+  background: rgba(253,203,110,.1);
+  border-radius: 6px;
+  display: inline-block;
+}
 
 /* ── Buttons ──────────────────────────────────────── */
 .btn {
@@ -270,6 +305,8 @@ input:focus, select:focus { border-color: var(--accent); }
 }
 .queue-name { font-weight: 600; flex: 1; }
 .queue-rating { color: var(--text-muted); font-size: .85rem; }
+.queue-wait { color: var(--warning); font-size: .8rem; font-weight: 600; }
+.queue-games { color: var(--text-muted); font-size: .8rem; }
 .queue-actions { display: flex; gap: 4px; }
 
 /* ── Match Preview ────────────────────────────────── */
@@ -466,6 +503,44 @@ input[type="range"]::-webkit-slider-thumb {
   padding: 40px 20px;
   font-style: italic;
 }
+
+/* ── Payments ─────────────────────────────────────── */
+.payment-info {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  font-size: .88rem;
+  color: var(--text-muted);
+}
+.payment-summary {
+  font-weight: 600;
+  font-size: .9rem;
+  color: var(--warning);
+}
+.payment-owes { background: rgba(225,112,85,.15); color: var(--danger); }
+.payment-credit { background: rgba(0,184,148,.15); color: var(--success); }
+.payment-clear { background: rgba(138,143,168,.1); color: var(--text-muted); }
+
+.payment-log-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  font-size: .85rem;
+}
+.payment-log-icon { font-size: 1rem; flex-shrink: 0; }
+.payment-log-name { font-weight: 600; min-width: 120px; }
+.payment-log-amount { font-weight: 700; min-width: 80px; }
+.payment-log-amount.charge { color: var(--danger); }
+.payment-log-amount.payment { color: var(--success); }
+.payment-log-note { color: var(--text-muted); flex: 1; }
+.payment-log-date { color: var(--text-muted); font-size: .78rem; white-space: nowrap; }
 
 /* ── Utilities ────────────────────────────────────── */
 .mt-16 { margin-top: 16px; }

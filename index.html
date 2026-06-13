@@ -28,6 +28,7 @@
     <button class="tab-btn" data-tab="players">Players</button>
     <button class="tab-btn" data-tab="queue">Queue</button>
     <button class="tab-btn" data-tab="history">History</button>
+    <button class="tab-btn" data-tab="payments">Payments</button>
     <button class="tab-btn" data-tab="settings">Settings</button>
   </nav>
 
@@ -36,11 +37,19 @@
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-value" id="stat-players">0</div>
-        <div class="stat-label">Players</div>
+        <div class="stat-label">Total Players</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="stat-queue">0</div>
         <div class="stat-label">In Queue</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-playing">0</div>
+        <div class="stat-label">Playing</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-idle">0</div>
+        <div class="stat-label">Idle</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="stat-active">0</div>
@@ -71,12 +80,21 @@
         <input type="text" id="player-name" placeholder="Enter name…" autocomplete="off">
       </div>
       <div class="form-group" style="flex:1">
-        <label for="player-level">Skill Level</label>
+        <label for="player-level">Level</label>
         <select id="player-level">
-          <option value="beginner">Beginner</option>
-          <option value="intermediate" selected>Intermediate</option>
-          <option value="advanced">Advanced</option>
-          <option value="expert">Expert</option>
+          <option value="A+">A+</option>
+          <option value="A">A</option>
+          <option value="B+">B+</option>
+          <option value="B">B</option>
+          <option value="C+">C+</option>
+          <option value="C" selected>C</option>
+          <option value="D+">D+</option>
+          <option value="D">D</option>
+          <option value="E+">E+</option>
+          <option value="E">E</option>
+          <option value="F+">F+</option>
+          <option value="F">F</option>
+          <option value="G">G</option>
         </select>
       </div>
       <button class="btn btn-primary" onclick="App.addPlayer()">Add Player</button>
@@ -123,6 +141,59 @@
     <div id="history-list"></div>
   </section>
 
+  <!-- ═══ Payments ═══ -->
+  <section id="tab-payments" class="tab-panel">
+    <div class="section-header">
+      <h3>Shuttle Payments</h3>
+      <div class="flex-gap">
+        <span class="payment-summary" id="payment-total-owed"></span>
+      </div>
+    </div>
+
+    <div class="payment-info" id="shuttle-cost-info"></div>
+
+    <!-- Record a manual payment -->
+    <div class="settings-section">
+      <h4>Record Payment</h4>
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label for="pay-player">Player</label>
+          <select id="pay-player"></select>
+        </div>
+        <div class="form-group" style="flex:1">
+          <label for="pay-amount">Amount</label>
+          <input type="number" id="pay-amount" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label for="pay-note">Note</label>
+          <input type="text" id="pay-note" placeholder="Optional">
+        </div>
+        <button class="btn btn-success btn-sm" onclick="App.recordPayment()">💰 Record Payment</button>
+      </div>
+    </div>
+
+    <!-- Player balances -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Games Charged</th>
+            <th>Total Charged</th>
+            <th>Total Paid</th>
+            <th>Balance</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="payments-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Payment history log -->
+    <h4 class="mt-16 mb-16">Transaction Log</h4>
+    <div id="payment-log"></div>
+  </section>
+
   <!-- ═══ Settings ═══ -->
   <section id="tab-settings" class="tab-panel">
     <h3 class="mb-16">Settings</h3>
@@ -139,6 +210,10 @@
           <option value="singles">Singles (1v1)</option>
           <option value="doubles">Doubles (2v2)</option>
         </select>
+      </div>
+      <div class="settings-row">
+        <label>Shuttle Cost per Game ($)</label>
+        <input type="number" id="set-shuttle-cost" min="0" step="0.50" value="5.00">
       </div>
       <div class="settings-row">
         <label>Challenge Factor</label>

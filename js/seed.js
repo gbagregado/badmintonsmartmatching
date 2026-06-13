@@ -5,22 +5,22 @@
 const Seed = (() => {
 
   const SAMPLE_PLAYERS = [
-    { name: 'Alex Chen', level: 'advanced' },
-    { name: 'Maria Santos', level: 'intermediate' },
-    { name: 'Jordan Lee', level: 'expert' },
-    { name: 'Priya Sharma', level: 'beginner' },
-    { name: 'Tom Wilson', level: 'intermediate' },
-    { name: 'Yuki Tanaka', level: 'advanced' },
-    { name: 'Sam Rodriguez', level: 'intermediate' },
-    { name: 'Nina Patel', level: 'advanced' },
-    { name: 'Chris Morgan', level: 'beginner' },
-    { name: 'Jasmine Wu', level: 'expert' },
-    { name: 'Diego Alvarez', level: 'intermediate' },
-    { name: 'Lily Zhang', level: 'advanced' },
-    { name: 'Ryan O\'Brien', level: 'intermediate' },
-    { name: 'Aisha Khan', level: 'beginner' },
-    { name: 'Ben Harris', level: 'advanced' },
-    { name: 'Mei Lin', level: 'expert' },
+    { name: 'Alex Chen', level: 'B+' },
+    { name: 'Maria Santos', level: 'C' },
+    { name: 'Jordan Lee', level: 'A' },
+    { name: 'Priya Sharma', level: 'E' },
+    { name: 'Tom Wilson', level: 'C+' },
+    { name: 'Yuki Tanaka', level: 'B' },
+    { name: 'Sam Rodriguez', level: 'C' },
+    { name: 'Nina Patel', level: 'B+' },
+    { name: 'Chris Morgan', level: 'D+' },
+    { name: 'Jasmine Wu', level: 'A+' },
+    { name: 'Diego Alvarez', level: 'C+' },
+    { name: 'Lily Zhang', level: 'B' },
+    { name: 'Ryan O\'Brien', level: 'D' },
+    { name: 'Aisha Khan', level: 'E+' },
+    { name: 'Ben Harris', level: 'B+' },
+    { name: 'Mei Lin', level: 'A' },
   ];
 
   function run() {
@@ -117,21 +117,30 @@ const Seed = (() => {
     // 5) Start 2 active matches on courts 1 & 2
     db = DB.get();
     const remaining = db.players.filter(p => !toQueue.includes(p.id));
-    if (remaining.length >= 4) {
+    if (db.settings.gameMode === 'doubles' && remaining.length >= 4) {
       DB.createMatch('court-1',
         [remaining[0].id, remaining[1].id],
         [remaining[2].id, remaining[3].id]
       );
+    } else if (db.settings.gameMode === 'singles' && remaining.length >= 2) {
+      DB.createMatch('court-1',
+        [remaining[0].id],
+        [remaining[1].id]
+      );
     }
-    if (remaining.length >= 6) {
-      // Singles match on court 2 with remaining players
+    if (db.settings.gameMode === 'doubles' && remaining.length >= 8) {
+      DB.createMatch('court-2',
+        [remaining[4].id, remaining[5].id],
+        [remaining[6].id, remaining[7].id]
+      );
+    } else if (db.settings.gameMode === 'singles' && remaining.length >= 6) {
       DB.createMatch('court-2',
         [remaining[4].id],
         [remaining[5].id]
       );
     }
 
-    console.log('[Seed] Done! 16 players, 24 historical matches, 10 in queue, 2 active matches.');
+    console.log('[Seed] Done! 16 players, 24 historical matches, queue + active matches seeded.');
     return true;
   }
 
