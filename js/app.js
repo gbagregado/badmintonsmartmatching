@@ -250,10 +250,11 @@ const App = (() => {
           : queueIds.has(id) ? '🟡 In Queue' : '🟢 Idle';
         const streak = p.streak > 0 ? ` 🔥${p.streak}W` : p.streak < 0 ? ` ❄️${Math.abs(p.streak)}L` : '';
         const games = db.queue.find(q => q.id === id)?.gamesPlayedToday || 0;
+        const newTag = p.matchesPlayed < 5 ? ` 🆕 New (${p.matchesPlayed} total)` : ` · ${p.matchesPlayed} matches`;
         return `<div class="analysis-player">
           <span class="level-badge level-${p.skillLevel.replace('+','p')}">${esc(p.skillLevel)}</span>
           <span><strong>${esc(p.name)}</strong>${streak}</span>
-          <span class="analysis-player-rating">${p.rating} · ${status}${games > 0 ? ` · ${games} games today` : ''}</span>
+          <span class="analysis-player-rating">${p.rating} · ${status}${games > 0 ? ` · ${games} today` : ''}${newTag}</span>
         </div>`;
       }).join('');
       return `<div class="analysis-team">
@@ -298,7 +299,7 @@ const App = (() => {
       if (p.streak <= -4) flags.push({ level: 'info', icon: '❄️', text: `${p.name} has lost ${Math.abs(p.streak)} in a row — consider giving them a fairer match.` });
     });
 
-    // Games played today
+    // Games played today (fatigue)
     [...teamA, ...teamB].forEach(id => {
       const qEntry = db.queue.find(q => q.id === id);
       const games = qEntry?.gamesPlayedToday || 0;
@@ -307,6 +308,50 @@ const App = (() => {
         flags.push({ level: 'warning', icon: '😓', text: `${p?.name} has already played ${games} games today — they may be fatigued.` });
       }
     });
+
+    // New / inexperienced players
+    [...teamA, ...teamB].forEach(id => {
+      const p = getP(id);
+      if (!p) return;
+      if (p.matchesPlayed === 0) {
+        flags.push({ level: 'info', icon: '🆕', text: `${p.name} has never played a match — their rating (${p.rating}) is unproven. Expect unpredictable performance.` });
+      } else if (p.matchesPlayed < 5) {
+        flags.push({ level: 'info', icon: '🆕', text: `${p.name} has only played ${p.matchesPlayed} match${p.matchesPlayed > 1 ? 'es' : ''} — rating may not reflect true skill yet.` });
+      }
+    });
+
+    // Overplayed vs underplayed today
+    const allGamesToday = db.players.map(p => {
+      const q = db.queue.find(e => e.id === p.id);
+      return q?.gamesPlayedToday || 0;
+    });
+    const maxGamesToday = Math.max(...allGamesToday, 0);
+    const avgGamesToday = allGamesToday.length
+      ? allGamesToday.reduce((a, b) => a + b, 0) / allGamesToday.length
+      : 0;
+
+    [...teamA, ...teamB].forEach(id => {
+      const p = getP(id);
+      if (!p) return;
+      const qEntry = db.queue.find(q => q.id === id);
+      const games = qEntry?.gamesPlayedToday || 0;
+      if (maxGamesToday >= 3 && games === maxGamesToday && games > Math.ceil(avgGamesToday)) {
+        flags.push({ level: 'warning', icon: '🔄', text: `${p.name} is one of today's most frequent players (${games} games) while some players have had fewer opportunities.` });
+      }
+    });
+
+    // Players with 0 games today (being sidelined)
+    const pickedIds = new Set([...teamA, ...teamB]);
+    const sideline = db.players.filter(p => {
+      const q = db.queue.find(e => e.id === p.id);
+      const games = q?.gamesPlayedToday || 0;
+      return games === 0 && maxGamesToday >= 2 && !pickedIds.has(p.id) && !playingIds.has(p.id);
+    });
+    if (sideline.length > 0) {
+      const names = sideline.slice(0, 3).map(p => p.name).join(', ');
+      const more = sideline.length > 3 ? ` +${sideline.length - 3} more` : '';
+      flags.push({ level: 'info', icon: '⏳', text: `${names}${more} ${sideline.length === 1 ? 'has' : 'have'} not played any games today yet — consider giving them priority.` });
+    }
 
     // Overall match quality
     let quality, qualityLabel;
