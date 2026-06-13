@@ -171,8 +171,8 @@ const Matchmaker = (() => {
       const available = queuedPlayers.filter(p => !usedPlayerIds.has(p.id));
       if (available.length < needed) break;
 
-      // Limit combo explosion: take top 12 from queue (sorted by wait priority)
-      const pool = available.slice(0, 12);
+      // Limit combo explosion: take enough players for this court plus look-ahead buffer
+      const pool = available.slice(0, needed * 3);
       const pairings = generatePairings(pool, mode);
 
       if (pairings.length === 0) {
