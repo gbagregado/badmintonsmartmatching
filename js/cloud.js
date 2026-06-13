@@ -400,6 +400,45 @@ const Cloud = (() => {
     };
   }
 
+  // ── Join Requests ─────────────────────────────────────────
+  async function getJoinRequests(status = 'pending') {
+    if (!isConnected()) return [];
+    const { data } = await supabase.from('join_requests')
+      .select('*')
+      .eq('status', status)
+      .order('created_at', { ascending: true });
+    return data || [];
+  }
+
+  async function approveJoinRequest(requestId, playerId) {
+    if (!isConnected()) return false;
+    const { error } = await supabase.from('join_requests')
+      .update({ status: 'approved', player_id: playerId })
+      .eq('id', requestId);
+    if (error) return false;
+    // Link device to player
+    const { data: req } = await supabase.from('join_requests').select('device_id').eq('id', requestId).maybeSingle();
+    if (req?.device_id) {
+      await supabase.from('player_devices').upsert({ device_id: req.device_id, player_id: playerId });
+    }
+    return true;
+  }
+
+  async function rejectJoinRequest(requestId) {
+    if (!isConnected()) return false;
+    const { error } = await supabase.from('join_requests')
+      .update({ status: 'rejected' })
+      .eq('id', requestId);
+    return !error;
+  }
+
+  async function saveRatingSnapshot(playerId, rating, matchId) {
+    if (!isConnected()) return;
+    await supabase.from('player_rating_history').insert({
+      player_id: playerId, rating, match_id: matchId || null,
+    });
+  }
+
   return {
     init, isConnected, testConnection,
     onChange, subscribe,
@@ -408,6 +447,7 @@ const Cloud = (() => {
     getQueue, setQueue, enqueue, dequeue,
     getActiveMatches, getMatchHistory, createMatch, finishMatch,
     getSettings, updateSettings,
+    getJoinRequests, approveJoinRequest, rejectJoinRequest, saveRatingSnapshot,
     pullAll, pushAll,
   };
 })();

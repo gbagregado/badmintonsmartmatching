@@ -30,6 +30,8 @@ const App = (() => {
         Cloud.subscribe();
       }
       updateSyncBadge(Cloud.isConnected());
+      // Load join requests on startup
+      if (Cloud.isConnected()) refreshJoinRequests();
     }
 
     const db = DB.get();
@@ -861,6 +863,16 @@ const App = (() => {
     DB.finishMatch(matchId, scoreA, scoreB);
     DB.chargeMatch(matchId);
 
+    // Save ELO snapshots for all players involved
+    if (Cloud.isConnected() && match) {
+      const freshDb = DB.get();
+      const finishedMatch = freshDb.matches.find(m => m.id === matchId);
+      [...match.teamA, ...match.teamB].forEach(pid => {
+        const player = freshDb.players.find(p => p.id === pid);
+        if (player) Cloud.saveRatingSnapshot(pid, player.rating, matchId);
+      });
+    }
+
     // Auto re-queue finished players at the back of the line
     // Increment their gamesPlayedToday counter
     for (const pid of matchPlayerIds) {
@@ -890,6 +902,114 @@ const App = (() => {
 
   function closeScoreDialog() {
     document.getElementById('score-dialog').classList.remove('open');
+  }
+
+  // ── QR Code ───────────────────────────────────────────────
+  function showQRCode() {
+    const url = window.location.origin + '/player/';
+    const el = document.getElementById('qr-container');
+    const urlEl = document.getElementById('qr-url-text');
+    if (urlEl) urlEl.textContent = url;
+    if (el) {
+      el.innerHTML = '';
+      if (typeof QRCode !== 'undefined') {
+        new QRCode(el, {
+          text: url, width: 220, height: 220,
+          colorDark: '#ffffff', colorLight: '#1a1a2e',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+      } else {
+        el.innerHTML = `<div class="qr-fallback"><a href="${esc(url)}" target="_blank">${esc(url)}</a></div>`;
+      }
+    }
+    document.getElementById('qr-modal').classList.add('open');
+  }
+
+  function closeQRCode() {
+    document.getElementById('qr-modal').classList.remove('open');
+  }
+
+  // ── Join Requests ─────────────────────────────────────────
+  async function refreshJoinRequests() {
+    if (!Cloud.isConnected()) {
+      toast('No cloud connection', 'warning');
+      return;
+    }
+    const requests = await Cloud.getJoinRequests('pending');
+    const badge = document.getElementById('requests-badge');
+    const countBadge = document.getElementById('requests-count-badge');
+    const panel = document.getElementById('join-requests-panel');
+    const list = document.getElementById('join-requests-list');
+
+    if (badge) { badge.textContent = requests.length; badge.style.display = requests.length > 0 ? 'flex' : 'none'; }
+    if (countBadge) countBadge.textContent = requests.length;
+    if (panel) panel.style.display = 'block';
+
+    if (!list) return;
+    if (requests.length === 0) {
+      list.innerHTML = '<div class="empty-state">No pending requests.</div>';
+      return;
+    }
+
+    const db = DB.get();
+    list.innerHTML = requests.map(req => {
+      const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `<div class="join-request-card" id="req-${req.id}">
+        <div class="join-req-info">
+          <div class="join-req-name">${esc(req.display_name)}</div>
+          <div class="join-req-meta">
+            Level: <strong>${esc(req.skill_level)}</strong>
+            ${req.gender ? ` · ${esc(req.gender)}` : ''}
+            ${req.contact ? ` · ${esc(req.contact)}` : ''}
+            · ${time}
+          </div>
+        </div>
+        <div class="join-req-actions">
+          <select id="link-player-${req.id}" class="join-req-player-select">
+            <option value="">— New player —</option>
+            ${db.players.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('')}
+          </select>
+          <button class="btn btn-xs btn-success" onclick="App.approveJoinRequest('${req.id}', '${esc(req.display_name)}', '${esc(req.skill_level)}')">✓ Approve</button>
+          <button class="btn btn-xs btn-danger"  onclick="App.rejectJoinRequest('${req.id}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function approveJoinRequest(requestId, displayName, skillLevel) {
+    const selectEl = document.getElementById(`link-player-${requestId}`);
+    let playerId = selectEl?.value;
+
+    if (!playerId) {
+      // Create new player in DB
+      DB.addPlayer(displayName, skillLevel);
+      const db = DB.get();
+      const newPlayer = db.players.find(p => p.name === displayName);
+      if (!newPlayer) return toast('Failed to create player', 'danger');
+      playerId = newPlayer.id;
+      // Push to Supabase if connected
+      if (Cloud.isConnected()) {
+        await Cloud.addPlayer({ id: playerId, name: displayName, skillLevel, rating: newPlayer.rating, matchesPlayed: 0, wins: 0, losses: 0, streak: 0, totalPointsScored: 0, totalPointsLost: 0 });
+      }
+      toast(`${displayName} added as new player`, 'success');
+    }
+
+    const ok = await Cloud.approveJoinRequest(requestId, playerId);
+    if (ok) {
+      document.getElementById(`req-${requestId}`)?.remove();
+      toast(`${displayName} approved!`, 'success');
+      render();
+    } else {
+      toast('Approval failed — check connection', 'danger');
+    }
+  }
+
+  async function rejectJoinRequest(requestId) {
+    const ok = await Cloud.rejectJoinRequest(requestId);
+    if (ok) {
+      document.getElementById(`req-${requestId}`)?.remove();
+      toast('Request rejected', 'info');
+    }
   }
 
   function saveSettings() {
@@ -1082,10 +1202,18 @@ const App = (() => {
     startManualMatch, clearManualMatch, renderDashboardManual,
     confirmManualMatch, closeAnalysisDialog,
     switchHistoryView,
+    showQRCode, closeQRCode,
+    refreshJoinRequests, approveJoinRequest, rejectJoinRequest,
     saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,
   };
 })();
 
-document.addEventListener('DOMContentLoaded', App.init);
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
+  // Poll for join requests every 30s when cloud is available
+  setInterval(() => {
+    if (Cloud.isConnected()) App.refreshJoinRequests();
+  }, 30000);
+});

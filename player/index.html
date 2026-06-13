@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#4ecdc4">
+  <title>Badminton Player</title>
+  <link rel="manifest" href="/player/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/player/css/player.css">
+</head>
+<body>
+
+  <!-- ══ Loading Screen ══════════════════════════════════════ -->
+  <div id="screen-loading" class="screen" style="display:flex">
+    <div class="loading-spinner"></div>
+    <span>Loading…</span>
+  </div>
+
+  <!-- ══ Setup Screen ════════════════════════════════════════ -->
+  <div id="screen-setup" class="screen">
+    <div class="setup-header">
+      <div class="setup-emoji">🏸</div>
+      <h2>Set Up Your Profile</h2>
+      <p>This is saved on your phone. You only do this once.</p>
+    </div>
+
+    <form id="setup-form" novalidate>
+      <div class="form-group">
+        <label for="setup-name">Display Name *</label>
+        <input type="text" id="setup-name" placeholder="Your name" required autocomplete="name">
+      </div>
+
+      <div class="form-group">
+        <label for="setup-contact">Contact Number (optional)</label>
+        <input type="tel" id="setup-contact" placeholder="+63 912 345 6789" autocomplete="tel">
+      </div>
+
+      <div class="form-group">
+        <label for="setup-gender">Gender</label>
+        <select id="setup-gender">
+          <option value="">Prefer not to say</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Non-binary">Non-binary</option>
+          <option value="Genderqueer">Genderqueer</option>
+          <option value="Agender">Agender</option>
+          <option value="Transgender">Transgender</option>
+          <option value="Other">Other (specify)</option>
+        </select>
+      </div>
+      <div id="gender-other-wrap" class="form-group" style="display:none">
+        <label for="setup-gender-other">Specify gender</label>
+        <input type="text" id="setup-gender-other" placeholder="Your gender">
+      </div>
+
+      <div class="form-group">
+        <label for="setup-level">Skill Level</label>
+        <select id="setup-level">
+          <option value="G">G — Beginner</option>
+          <option value="F">F</option>
+          <option value="F+">F+</option>
+          <option value="E">E</option>
+          <option value="E+">E+</option>
+          <option value="D">D</option>
+          <option value="D+">D+</option>
+          <option value="C" selected>C — Intermediate</option>
+          <option value="C+">C+</option>
+          <option value="B">B</option>
+          <option value="B+">B+</option>
+          <option value="A">A — Advanced</option>
+          <option value="A+">A+ — Elite</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <div class="toggle-row">
+          <input type="checkbox" id="weight-toggle">
+          <label for="weight-toggle">Enter my weight for accurate calorie tracking</label>
+        </div>
+        <div id="weight-row" style="display:none">
+          <input type="number" id="setup-weight" placeholder="Weight in kg (e.g. 65)" min="30" max="200" step="0.5">
+        </div>
+        <div class="weight-hint">
+          💡 Weight is optional. If you skip it, we'll estimate calories using an average — slightly less accurate but still useful.
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit">Save &amp; Continue →</button>
+    </form>
+  </div>
+
+  <!-- ══ Pending Approval Screen ═════════════════════════════ -->
+  <div id="screen-pending" class="screen">
+    <div class="pending-icon">⏳</div>
+    <div class="pending-title">Request Sent!</div>
+    <p id="pending-msg">Waiting for the queue master to approve your registration…</p>
+    <div class="pending-pulse"></div>
+    <p class="pending-note">This page will update automatically when you're approved. You can also ask the queue master to add you directly.</p>
+  </div>
+
+  <!-- ══ Main App Screen ══════════════════════════════════════ -->
+  <div id="screen-main" class="screen" style="display:none">
+
+    <!-- Header -->
+    <header class="player-header" id="player-header">
+      <div class="player-header-avatar" id="header-avatar">?</div>
+      <div>
+        <div class="player-header-name" id="header-name">Player</div>
+        <div class="player-header-level" id="header-level">Level —</div>
+      </div>
+      <div class="live-dot" id="live-indicator">LIVE</div>
+    </header>
+
+    <!-- Tab contents -->
+    <div class="tab-area">
+
+      <div id="tab-queue" class="tab-content">
+        <div class="tab-scroll">
+          <div class="empty-note">Loading queue…</div>
+        </div>
+      </div>
+
+      <div id="tab-stats" class="tab-content">
+        <div class="tab-scroll">
+          <div class="empty-note">Loading stats…</div>
+        </div>
+      </div>
+
+      <div id="tab-history" class="tab-content">
+        <div class="tab-scroll">
+          <div class="empty-note">Loading history…</div>
+        </div>
+      </div>
+
+      <div id="tab-insights" class="tab-content">
+        <div class="tab-scroll">
+          <div class="empty-note">Loading insights…</div>
+        </div>
+      </div>
+
+      <div id="tab-profile" class="tab-content">
+        <div class="tab-scroll">
+          <div class="empty-note">Loading profile…</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-tab="queue">
+        <span class="nav-icon">📋</span>Queue
+      </button>
+      <button class="nav-btn" data-tab="stats">
+        <span class="nav-icon">📊</span>Stats
+      </button>
+      <button class="nav-btn" data-tab="history">
+        <span class="nav-icon">🕐</span>History
+      </button>
+      <button class="nav-btn" data-tab="insights">
+        <span class="nav-icon">💡</span>Insights
+      </button>
+      <button class="nav-btn" data-tab="profile">
+        <span class="nav-icon">👤</span>Profile
+      </button>
+    </nav>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="/player/js/player-cloud.js"></script>
+  <script src="/player/js/player-tips.js"></script>
+  <script src="/player/js/player-app.js"></script>
+
+  <script>
+    // Update header once profile loads
+    document.addEventListener('DOMContentLoaded', () => {
+      const profile = JSON.parse(localStorage.getItem('playerProfile') || 'null');
+      if (profile) {
+        const av = document.getElementById('header-avatar');
+        const nm = document.getElementById('header-name');
+        const lv = document.getElementById('header-level');
+        if (av) av.textContent = profile.displayName.charAt(0).toUpperCase();
+        if (nm) nm.textContent = profile.displayName;
+        if (lv) lv.textContent = `Level ${profile.skillLevel}`;
+      }
+    });
+  </script>
+</body>
+</html>

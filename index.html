@@ -17,7 +17,9 @@
       <h1>🏸 Badminton Queue</h1>
       <span class="subtitle">Smart court allocation & matchmaking</span>
     </div>
-    <div style="margin-left:auto">
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <button class="btn btn-outline btn-sm" onclick="App.showQRCode()" title="Show Player App QR Code">📱 Player QR</button>
+      <span id="requests-badge" class="requests-badge" style="display:none" onclick="App.switchTab('dashboard')" title="Pending join requests">0</span>
       <span id="sync-badge" class="sync-badge offline">💾 Local Only</span>
     </div>
   </header>
@@ -61,7 +63,16 @@
       </div>
     </div>
 
-    <div class="section-header">
+    <!-- Join Requests Panel -->
+    <div id="join-requests-panel" style="display:none">
+      <div class="section-header">
+        <h3>📱 Player Join Requests <span id="requests-count-badge" class="requests-count-badge">0</span></h3>
+        <button class="btn btn-outline btn-sm" onclick="App.refreshJoinRequests()">↻ Refresh</button>
+      </div>
+      <div id="join-requests-list"></div>
+    </div>
+
+    <div class="section-header mt-24">
       <h3>Courts</h3>
       <button id="btn-auto-assign" class="btn btn-primary btn-sm" onclick="App.autoAssign()">
         ⚡ Auto-Assign Matches
@@ -283,6 +294,19 @@
     </div>
   </section>
 
+  <!-- ═══ QR Code Modal ═══ -->
+  <div id="qr-modal" class="dialog-overlay" onclick="event.target===this && App.closeQRCode()">
+    <div class="dialog qr-dialog">
+      <h3>📱 Player App</h3>
+      <p class="qr-subtitle">Players scan this QR code to open the companion app on their phone.</p>
+      <div id="qr-container" class="qr-container"></div>
+      <div class="qr-url" id="qr-url-text"></div>
+      <div class="dialog-actions">
+        <button class="btn btn-outline btn-sm" onclick="App.closeQRCode()">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Score Dialog ═══ -->
   <div id="score-dialog" class="dialog-overlay" onclick="event.target===this && App.closeScoreDialog()">
     <div class="dialog">
@@ -321,6 +345,7 @@
   </div>
 
   <!-- ═══ Scripts ═══ -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/cloud.js"></script>
   <script src="js/matchmaker.js"></script>
