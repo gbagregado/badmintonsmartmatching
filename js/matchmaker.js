@@ -19,7 +19,7 @@ const Matchmaker = (() => {
    * @param {string} mode – 'singles' | 'doubles'
    * @returns {Array<{teamA: string[], teamB: string[]}>}
    */
-  function generatePairings(players, mode) {
+  function generatePairings(players, mode, ignoreGap = false) {
     const size = mode === 'doubles' ? 2 : 1;
     const needed = size * 2;
     if (players.length < needed) return [];
@@ -28,9 +28,11 @@ const Matchmaker = (() => {
     const pairings = [];
 
     for (const group of combos) {
-      // Skip groups where the rating gap is too large
-      const ratings = group.map(p => p.rating);
-      if (Math.max(...ratings) - Math.min(...ratings) > MAX_RATING_GAP) continue;
+      // Skip groups where the rating gap is too large (unless forced)
+      if (!ignoreGap) {
+        const ratings = group.map(p => p.rating);
+        if (Math.max(...ratings) - Math.min(...ratings) > MAX_RATING_GAP) continue;
+      }
 
       if (mode === 'singles') {
         pairings.push({ teamA: [group[0].id], teamB: [group[1].id], players: group });
@@ -176,9 +178,8 @@ const Matchmaker = (() => {
       const pairings = generatePairings(pool, mode);
 
       if (pairings.length === 0) {
-        // If no valid pairings due to level gap, try with relaxed pool
-        // Take all available and try
-        const allPairings = generatePairings(available, mode);
+        // No valid pairings within gap limit — force-assign ignoring gap constraint
+        const allPairings = generatePairings(available, mode, true);
         if (allPairings.length === 0) break;
 
         let bestScore = Infinity;
