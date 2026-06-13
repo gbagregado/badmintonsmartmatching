@@ -195,6 +195,9 @@ const App = (() => {
     renderManualMatch(DB.get());
   }
 
+  // Holds validated picks while analysis dialog is open
+  let _pendingManualMatch = null;
+
   function startManualMatch() {
     const db = DB.get();
     const mode = db.settings.gameMode;
@@ -215,14 +218,149 @@ const App = (() => {
 
     if (!courtId) return toast('Select a court', 'warning');
 
+    // Build and show analysis
+    const analysis = buildMatchAnalysis(teamA, teamB, courtId, db);
+    document.getElementById('analysis-content').innerHTML = analysis.html;
+    document.getElementById('analysis-dialog').classList.add('open');
+    _pendingManualMatch = { teamA, teamB, courtId };
+  }
+
+  function buildMatchAnalysis(teamA, teamB, courtId, db) {
+    const getP = id => db.players.find(p => p.id === id);
+    const playingIds = new Set();
+    db.activeMatches.forEach(m => [...m.teamA, ...m.teamB].forEach(id => playingIds.add(id)));
+    const queueIds = new Set(db.queue.map(q => q.id));
+    const court = db.courts.find(c => c.id === courtId);
+
+    const avgRating = ids => {
+      const ratings = ids.map(id => getP(id)?.rating || 1200);
+      return Math.round(ratings.reduce((a, b) => a + b, 0) / ratings.length);
+    };
+
+    const avgA = avgRating(teamA);
+    const avgB = avgRating(teamB);
+    const ratingGap = Math.abs(avgA - avgB);
+
+    // ── Team cards ──
+    const teamCard = (ids, label) => {
+      const players = ids.map(id => {
+        const p = getP(id);
+        if (!p) return '';
+        const status = playingIds.has(id) ? '🔴 Playing'
+          : queueIds.has(id) ? '🟡 In Queue' : '🟢 Idle';
+        const streak = p.streak > 0 ? ` 🔥${p.streak}W` : p.streak < 0 ? ` ❄️${Math.abs(p.streak)}L` : '';
+        const games = db.queue.find(q => q.id === id)?.gamesPlayedToday || 0;
+        return `<div class="analysis-player">
+          <span class="level-badge level-${p.skillLevel.replace('+','p')}">${esc(p.skillLevel)}</span>
+          <span><strong>${esc(p.name)}</strong>${streak}</span>
+          <span class="analysis-player-rating">${p.rating} · ${status}${games > 0 ? ` · ${games} games today` : ''}</span>
+        </div>`;
+      }).join('');
+      return `<div class="analysis-team">
+        <div class="analysis-team-name">${label}</div>
+        ${players}
+        <div class="analysis-team-avg">Avg rating: <strong>${avgRating(ids)}</strong></div>
+      </div>`;
+    };
+
+    // ── Flags ──
+    const flags = [];
+
+    // Team balance
+    if (ratingGap > 400) {
+      flags.push({ level: 'danger', icon: '⚠️', text: `Teams are heavily unbalanced — ${ratingGap} rating gap between team averages (ideal < 200). Expect a one-sided match.` });
+    } else if (ratingGap > 200) {
+      flags.push({ level: 'warning', icon: '⚡', text: `Teams are slightly unbalanced — ${ratingGap} rating gap. One team has a clear advantage.` });
+    } else {
+      flags.push({ level: 'ok', icon: '✅', text: `Teams are well balanced — only ${ratingGap} rating gap.` });
+    }
+
+    // Player status warnings
+    const playingPicked = [...teamA, ...teamB].filter(id => playingIds.has(id));
+    if (playingPicked.length > 0) {
+      const names = playingPicked.map(id => getP(id)?.name).filter(Boolean).join(', ');
+      flags.push({ level: 'danger', icon: '🔴', text: `${names} ${playingPicked.length > 1 ? 'are' : 'is'} already in an active match. Starting this match will double-book them.` });
+    }
+
+    // Individual rating gaps within each team (doubles)
+    if (teamA.length > 1) {
+      const gapA = Math.abs((getP(teamA[0])?.rating || 1200) - (getP(teamA[1])?.rating || 1200));
+      const gapB = Math.abs((getP(teamB[0])?.rating || 1200) - (getP(teamB[1])?.rating || 1200));
+      if (gapA > 500) flags.push({ level: 'warning', icon: '👥', text: `Team A has a large skill gap between partners (${gapA} pts). Coordination may suffer.` });
+      if (gapB > 500) flags.push({ level: 'warning', icon: '👥', text: `Team B has a large skill gap between partners (${gapB} pts). Coordination may suffer.` });
+    }
+
+    // Streaks
+    [...teamA, ...teamB].forEach(id => {
+      const p = getP(id);
+      if (!p) return;
+      if (p.streak >= 5) flags.push({ level: 'info', icon: '🔥', text: `${p.name} is on a ${p.streak}-game win streak — they may be heavily favoured.` });
+      if (p.streak <= -4) flags.push({ level: 'info', icon: '❄️', text: `${p.name} has lost ${Math.abs(p.streak)} in a row — consider giving them a fairer match.` });
+    });
+
+    // Games played today
+    [...teamA, ...teamB].forEach(id => {
+      const qEntry = db.queue.find(q => q.id === id);
+      const games = qEntry?.gamesPlayedToday || 0;
+      if (games >= 4) {
+        const p = getP(id);
+        flags.push({ level: 'warning', icon: '😓', text: `${p?.name} has already played ${games} games today — they may be fatigued.` });
+      }
+    });
+
+    // Overall match quality
+    let quality, qualityLabel;
+    if (ratingGap <= 200 && playingPicked.length === 0) {
+      quality = 'good'; qualityLabel = '✅ Good match — well balanced, no issues.';
+    } else if (ratingGap <= 400 && playingPicked.length === 0) {
+      quality = 'fair'; qualityLabel = '⚡ Fair match — slight imbalance but playable.';
+    } else {
+      quality = 'poor'; qualityLabel = '⚠️ Poor match — significant issues found. Review before proceeding.';
+    }
+
+    const flagsHtml = flags.map(f =>
+      `<div class="analysis-flag ${f.level}">${f.icon} ${f.text}</div>`
+    ).join('');
+
+    const html = `
+      <div class="analysis-section">
+        <h4>Teams</h4>
+        <div class="analysis-teams">
+          ${teamCard(teamA, 'Team A')}
+          ${teamCard(teamB, 'Team B')}
+        </div>
+      </div>
+      <div class="analysis-section">
+        <h4>Overall Quality</h4>
+        <div class="analysis-quality ${quality}">${qualityLabel}</div>
+      </div>
+      <div class="analysis-section">
+        <h4>Flags (${flags.length})</h4>
+        <div class="analysis-flags">${flagsHtml}</div>
+      </div>
+      <div class="analysis-section" style="color:var(--text-muted);font-size:.82rem">
+        Court: <strong style="color:var(--text)">${esc(court?.name || courtId)}</strong>
+      </div>`;
+
+    return { html, quality };
+  }
+
+  function confirmManualMatch() {
+    if (!_pendingManualMatch) return;
+    const { teamA, teamB, courtId } = _pendingManualMatch;
+    _pendingManualMatch = null;
+    document.getElementById('analysis-dialog').classList.remove('open');
     DB.createMatch(courtId, teamA, teamB);
     toast('Match started!', 'success');
     render();
   }
 
+  function closeAnalysisDialog() {
+    document.getElementById('analysis-dialog').classList.remove('open');
+    _pendingManualMatch = null;
+  }
+
   function clearManualMatch() {
-    renderManualMatch(DB.get());
-    // Reset all selects to empty
     const db = DB.get();
     const teamSize = db.settings.gameMode === 'doubles' ? 2 : 1;
     ['a', 'b'].forEach(team => {
@@ -788,6 +926,7 @@ const App = (() => {
     enqueuePlayer, dequeuePlayer, enqueueAll, clearQueue, moveInQueue,
     autoAssign, openScoreDialog, submitScore, closeScoreDialog,
     startManualMatch, clearManualMatch, renderDashboardManual,
+    confirmManualMatch, closeAnalysisDialog,
     saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,

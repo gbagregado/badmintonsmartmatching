@@ -652,3 +652,123 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 12px;
   flex-wrap: wrap;
 }
+
+/* ── Match Analysis Dialog ────────────────────────── */
+.analysis-dialog-inner {
+  max-width: 540px;
+  width: 100%;
+}
+
+.analysis-section {
+  margin: 14px 0;
+}
+
+.analysis-section h4 {
+  font-size: .8rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.analysis-teams {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.analysis-team {
+  flex: 1;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.analysis-team-name {
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.analysis-player {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: .88rem;
+  padding: 3px 0;
+}
+
+.analysis-player-rating {
+  color: var(--text-muted);
+  font-size: .78rem;
+}
+
+.analysis-team-avg {
+  margin-top: 6px;
+  font-size: .8rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+
+.analysis-team-avg strong {
+  color: var(--text);
+}
+
+.analysis-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.analysis-flag {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: .88rem;
+  line-height: 1.4;
+}
+
+.analysis-flag.warning {
+  background: rgba(253,203,110,.08);
+  border: 1px solid rgba(253,203,110,.25);
+  color: var(--warning);
+}
+
+.analysis-flag.danger {
+  background: rgba(225,112,85,.08);
+  border: 1px solid rgba(225,112,85,.25);
+  color: var(--danger);
+}
+
+.analysis-flag.ok {
+  background: rgba(0,184,148,.08);
+  border: 1px solid rgba(0,184,148,.25);
+  color: var(--success);
+}
+
+.analysis-flag.info {
+  background: rgba(116,185,255,.08);
+  border: 1px solid rgba(116,185,255,.25);
+  color: var(--info);
+}
+
+.analysis-quality {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: .95rem;
+  margin-top: 4px;
+}
+
+.analysis-quality.good  { background: rgba(0,184,148,.12); border: 1px solid rgba(0,184,148,.3); color: var(--success); }
+.analysis-quality.fair  { background: rgba(253,203,110,.12); border: 1px solid rgba(253,203,110,.3); color: var(--warning); }
+.analysis-quality.poor  { background: rgba(225,112,85,.12); border: 1px solid rgba(225,112,85,.3); color: var(--danger); }

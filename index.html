@@ -301,6 +301,18 @@
   <!-- ═══ Toast Container ═══ -->
   <div id="toast-container"></div>
 
+  <!-- ═══ Match Analysis Dialog ═══ -->
+  <div id="analysis-dialog" class="dialog-overlay" onclick="event.target===this && App.closeAnalysisDialog()">
+    <div class="dialog analysis-dialog-inner">
+      <h3>⚠️ Match Analysis</h3>
+      <div id="analysis-content"></div>
+      <div class="dialog-actions">
+        <button class="btn btn-outline btn-sm" onclick="App.closeAnalysisDialog()">✕ Cancel</button>
+        <button class="btn btn-success btn-sm" onclick="App.confirmManualMatch()">▶ Proceed Anyway</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ Scripts ═══ -->
   <script src="js/storage.js"></script>
   <script src="js/cloud.js"></script>
