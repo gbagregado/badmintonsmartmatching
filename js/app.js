@@ -697,7 +697,7 @@ const App = (() => {
     addPlayer, confirmRemovePlayer,
     enqueuePlayer, dequeuePlayer, enqueueAll, clearQueue, moveInQueue,
     autoAssign, openScoreDialog, submitScore, closeScoreDialog,
-    saveSettings, exportData, importData, resetData, requeueFinished,
+    saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,
   };
