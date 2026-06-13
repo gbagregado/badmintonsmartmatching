@@ -441,6 +441,11 @@ const Cloud = (() => {
     });
   }
 
+  async function syncPlayerBalance(playerId, balance) {
+    if (!isConnected()) return;
+    await supabase.from('players').update({ balance: Math.max(0, parseFloat(balance.toFixed(2))) }).eq('id', playerId);
+  }
+
   return {
     init, isConnected, testConnection,
     onChange, subscribe,
@@ -450,6 +455,7 @@ const Cloud = (() => {
     getActiveMatches, getMatchHistory, createMatch, finishMatch,
     getSettings, updateSettings,
     getJoinRequests, approveJoinRequest, rejectJoinRequest, saveRatingSnapshot,
+    syncPlayerBalance,
     pullAll, pushAll,
   };
 })();

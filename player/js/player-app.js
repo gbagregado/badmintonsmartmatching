@@ -325,9 +325,10 @@ const PlayerApp = (() => {
       const teamB = (m.team_b||[]).map(playerName).join(' & ');
       const elapsed = fmtDuration(Date.now() - new Date(m.started_at));
       const hasMe = linkedId && ((m.team_a||[]).includes(linkedId) || (m.team_b||[]).includes(linkedId));
+      const courtLabel = m.court_id ? m.court_id.replace('court-', 'Court ') : 'Court';
       return `<div class="court-card ${hasMe ? 'my-court' : ''}">
         <div class="court-header">
-          <span class="court-label">🟢 Court</span>
+          <span class="court-label">🟢 ${esc(courtLabel)}</span>
           <span class="court-time">${elapsed}</span>
         </div>
         <div class="court-teams">
@@ -339,18 +340,61 @@ const PlayerApp = (() => {
       </div>`;
     }).join('') || '<div class="empty-note">No active matches right now.</div>';
 
-    // Queue list (top 10)
-    const queueHtml = queueRows.slice(0, 12).map((r, i) => {
-      const isMe = r.player_id === linkedId;
-      const p = allPlayers.find(x => x.id === r.player_id);
-      const wait = fmtDuration(Date.now() - new Date(r.queued_at));
-      return `<div class="queue-row ${isMe ? 'queue-row-me' : ''}">
-        <span class="q-pos">${i+1}</span>
-        <span class="q-name">${esc(p?.name || '?')} ${isMe ? '<span class="you-badge">YOU</span>' : ''}</span>
-        <span class="q-level">${esc(p?.skill_level || '?')}</span>
-        <span class="q-wait">${wait}</span>
-      </div>`;
-    }).join('') || '<div class="empty-note">Queue is empty.</div>';
+    // Queue list — smart compact display
+    const total = queueRows.length;
+    let queueHtml = '';
+    if (total === 0) {
+      queueHtml = '<div class="empty-note">Queue is empty.</div>';
+    } else {
+      // Build the set of indices to show
+      const SHOW_MAX = 5;
+      let indices = [];
+      if (total <= SHOW_MAX + 2) {
+        indices = queueRows.map((_, i) => i);
+      } else if (myPos === -1) {
+        // Not in queue: show first SHOW_MAX
+        indices = queueRows.slice(0, SHOW_MAX).map((_, i) => i);
+      } else if (myPos < SHOW_MAX) {
+        // Near the top: show first SHOW_MAX
+        indices = queueRows.slice(0, SHOW_MAX).map((_, i) => i);
+      } else {
+        // Far from top: show first 2, then gap, then player neighborhood
+        indices = [0, 1, -1, myPos - 1, myPos, myPos + 1].filter(i => i >= 0 && i < total);
+        // dedupe preserving order
+        indices = [...new Set(indices)];
+      }
+
+      let prev = -1;
+      for (const i of indices) {
+        if (prev !== -1 && i > prev + 1) {
+          queueHtml += `<div class="queue-ellipsis">· · ·</div>`;
+        }
+        const r = queueRows[i];
+        const isMe = r.player_id === linkedId;
+        const p = allPlayers.find(x => x.id === r.player_id);
+        const wait = fmtDuration(Date.now() - new Date(r.queued_at));
+        queueHtml += `<div class="queue-row ${isMe ? 'queue-row-me' : ''}">
+          <span class="q-pos">${i + 1}</span>
+          <span class="q-name">${esc(p?.name || '?')}${isMe ? ' <span class="you-badge">YOU</span>' : ''}</span>
+          <span class="q-level">${esc(p?.skill_level || '?')}</span>
+          <span class="q-wait">${wait}</span>
+        </div>`;
+        prev = i;
+      }
+      // Trailing ellipsis if there are more rows after the last shown
+      if (prev < total - 1) {
+        queueHtml += `<div class="queue-ellipsis">· · · +${total - prev - 1} more</div>`;
+      }
+    }
+
+    // Shuttle balance
+    const balance = playerData?.balance ?? 0;
+    const balanceHtml = linkedId ? `
+      <div class="shuttle-balance ${balance > 0 ? 'balance-owed' : 'balance-clear'}">
+        <span class="balance-icon">${balance > 0 ? '🏸' : '✅'}</span>
+        <span class="balance-label">Shuttle Balance</span>
+        <span class="balance-amount">${balance > 0 ? `₱${balance.toFixed(2)} owed` : 'All clear'}</span>
+      </div>` : '';
 
     el.innerHTML = `
       <div class="tab-scroll">
@@ -375,10 +419,11 @@ const PlayerApp = (() => {
         </div>
 
         <div class="section-block">
-          <h4>Queue (${queueRows.length} players)</h4>
+          <h4>Queue <span class="queue-total-badge">${total} waiting</span></h4>
           ${queueHtml}
-          ${queueRows.length > 12 ? `<div class="empty-note">+${queueRows.length - 12} more…</div>` : ''}
         </div>
+
+        ${balanceHtml}
 
         <div class="action-row">
           ${pendingQueueReq
@@ -471,10 +516,22 @@ const PlayerApp = (() => {
 
   async function requestLeaveQueue() {
     if (!linkedId) return;
+    if (!PlayerCloud.ready()) {
+      alert('No internet connection. Ask the queue master to remove you manually.');
+      return;
+    }
     if (!confirm('Request to leave the queue?')) return;
-    // Insert a leave request — QM handles the actual dequeue
-    await PlayerCloud.submitQueueRequest(deviceId, linkedId, profile.displayName, playerData?.skill_level || profile.skillLevel);
+    const { error } = await PlayerCloud.submitLeaveRequest(deviceId, linkedId, profile.displayName);
+    if (error) {
+      alert('Failed to send request: ' + (error.message || JSON.stringify(error)));
+      return;
+    }
     toast('Leave request sent to queue master.');
+    // Show pending leave state in action row
+    const actionRow = document.querySelector('.action-row');
+    if (actionRow) {
+      actionRow.innerHTML = `<div class="pending-queue-notice" style="border-color:rgba(253,121,168,.3);background:rgba(253,121,168,.08);color:#fd79a8">🚪 Leave request sent — waiting for queue master…</div>`;
+    }
   }
 
   // ── Stats Tab ─────────────────────────────────────────────

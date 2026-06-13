@@ -879,6 +879,7 @@ input[type="range"]::-webkit-slider-thumb {
   margin-bottom: 8px; padding: 0 2px;
 }
 .queue-req-card { border-left-color: var(--success); }
+.leave-req-card { border-left-color: #fd79a8; }
 
 /* ── QR Code modal ──────────────────────────────────────── */
 .qr-dialog { max-width: 320px; text-align: center; }

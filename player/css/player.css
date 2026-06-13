@@ -301,3 +301,31 @@ strong { color: var(--text); }
   background: rgba(253,203,110,.1); border: 1px solid rgba(253,203,110,.3);
   color: var(--warning); font-size: .88rem; font-weight: 600;
 }
+
+.queue-total-badge {
+  font-size: .7rem; font-weight: 600; background: rgba(78,205,196,.15);
+  color: var(--accent); padding: 2px 8px; border-radius: 10px; margin-left: 6px;
+  vertical-align: middle;
+}
+
+.queue-ellipsis {
+  text-align: center; color: var(--text-muted); font-size: .78rem;
+  padding: 4px 0; letter-spacing: .1em;
+}
+
+.shuttle-balance {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 14px; border-radius: 12px; margin: 0 0 10px;
+  font-size: .88rem;
+}
+.shuttle-balance.balance-owed {
+  background: rgba(253,121,168,.1); border: 1px solid rgba(253,121,168,.3);
+}
+.shuttle-balance.balance-clear {
+  background: rgba(85,239,196,.08); border: 1px solid rgba(85,239,196,.2);
+}
+.balance-icon { font-size: 1.1rem; }
+.balance-label { color: var(--text-muted); flex: 1; }
+.balance-amount { font-weight: 700; }
+.balance-owed .balance-amount { color: #fd79a8; }
+.balance-clear .balance-amount { color: #55efc4; }

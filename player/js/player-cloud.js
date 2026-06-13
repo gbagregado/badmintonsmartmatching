@@ -85,6 +85,25 @@ const PlayerCloud = (() => {
     return data;
   }
 
+  async function submitLeaveRequest(deviceId, playerId, displayName) {
+    if (!ready()) return { error: 'Offline' };
+    // Clear any previous pending leave request from this device
+    await sb.from('join_requests')
+      .delete()
+      .eq('device_id', deviceId)
+      .eq('type', 'queue_leave')
+      .eq('status', 'pending');
+    const { data, error } = await sb.from('join_requests').insert({
+      device_id: deviceId,
+      player_id: playerId,
+      display_name: displayName,
+      skill_level: '',
+      status: 'pending',
+      type: 'queue_leave',
+    }).select().single();
+    return { data, error };
+  }
+
   // ── Player data ───────────────────────────────────────────
   async function getPlayer(playerId) {
     if (!ready()) return null;
@@ -184,7 +203,7 @@ const PlayerCloud = (() => {
     init, ready,
     getLinkedPlayerId, linkDevice,
     submitJoinRequest, getMyRequest,
-    submitQueueRequest, getMyQueueRequest,
+    submitQueueRequest, getMyQueueRequest, submitLeaveRequest,
     getPlayer, getAllPlayers,
     getQueue, getActiveMatches, getPlayerMatches, getCompletedMatchCount,
     getRatingHistory,

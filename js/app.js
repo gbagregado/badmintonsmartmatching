@@ -863,13 +863,14 @@ const App = (() => {
     DB.finishMatch(matchId, scoreA, scoreB);
     DB.chargeMatch(matchId);
 
-    // Save ELO snapshots for all players involved
+    // Save ELO snapshots + sync balances for all players involved
     if (Cloud.isConnected() && match) {
       const freshDb = DB.get();
       const finishedMatch = freshDb.matches.find(m => m.id === matchId);
       [...match.teamA, ...match.teamB].forEach(pid => {
         const player = freshDb.players.find(p => p.id === pid);
         if (player) Cloud.saveRatingSnapshot(pid, player.rating, matchId);
+        Cloud.syncPlayerBalance(pid, DB.getPlayerBalance(pid, freshDb));
       });
     }
 
@@ -941,15 +942,16 @@ const App = (() => {
   // ── Join Requests ─────────────────────────────────────────
   async function refreshJoinRequests() {
     if (!Cloud.isConnected()) return;
-    const [regRequests, queueRequests] = await Promise.all([
+    const [regRequests, queueRequests, leaveRequests] = await Promise.all([
       Cloud.getJoinRequests('pending', 'registration'),
       Cloud.getJoinRequests('pending', 'queue_join'),
+      Cloud.getJoinRequests('pending', 'queue_leave'),
     ]);
-    const totalPending = regRequests.length + queueRequests.length;
-    const badge     = document.getElementById('requests-badge');
+    const totalPending = regRequests.length + queueRequests.length + leaveRequests.length;
+    const badge      = document.getElementById('requests-badge');
     const countBadge = document.getElementById('requests-count-badge');
-    const panel     = document.getElementById('join-requests-panel');
-    const list      = document.getElementById('join-requests-list');
+    const panel      = document.getElementById('join-requests-panel');
+    const list       = document.getElementById('join-requests-list');
 
     if (badge)      { badge.textContent = totalPending; badge.style.display = totalPending > 0 ? 'flex' : 'none'; }
     if (countBadge) countBadge.textContent = totalPending;
@@ -958,10 +960,33 @@ const App = (() => {
 
     const db = DB.get();
     let html = '';
+    let sectionCount = 0;
+
+    // ── Leave queue requests ──────────────────────────────
+    if (leaveRequests.length > 0) {
+      html += `<div class="req-section-label">🚪 Leave Requests</div>`;
+      html += leaveRequests.map(req => {
+        const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const inQueue = db.queue.some(q => q.id === req.player_id);
+        return `<div class="join-request-card leave-req-card" id="req-${req.id}">
+          <div class="join-req-info">
+            <div class="join-req-name">${esc(req.display_name)}</div>
+            <div class="join-req-meta">${inQueue ? '⏳ In queue' : '✅ Not in queue'} · ${time}</div>
+          </div>
+          <div class="join-req-actions">
+            ${inQueue
+              ? `<button class="btn btn-xs btn-warning" onclick="App.removeFromQueue('${req.id}','${req.player_id}','${esc(req.display_name)}')">Remove</button>`
+              : `<span style="color:var(--text-muted);font-size:.78rem">Already removed</span>`}
+            <button class="btn btn-xs btn-danger" onclick="App.rejectJoinRequest('${req.id}')">✕</button>
+          </div>
+        </div>`;
+      }).join('');
+      sectionCount++;
+    }
 
     // ── Queue join requests ──────────────────────────────
     if (queueRequests.length > 0) {
-      html += `<div class="req-section-label">📋 Queue Requests</div>`;
+      html += `<div class="req-section-label" style="margin-top:${sectionCount ? 14 : 0}px">📋 Queue Requests</div>`;
       html += queueRequests.map(req => {
         const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const alreadyInQueue = db.queue.some(q => q.id === req.player_id);
@@ -978,11 +1003,12 @@ const App = (() => {
           </div>
         </div>`;
       }).join('');
+      sectionCount++;
     }
 
     // ── Registration requests ────────────────────────────
     if (regRequests.length > 0) {
-      html += `<div class="req-section-label" style="margin-top:${queueRequests.length ? 14 : 0}px">👤 Registration Requests</div>`;
+      html += `<div class="req-section-label" style="margin-top:${sectionCount ? 14 : 0}px">👤 Registration Requests</div>`;
       html += regRequests.map(req => {
         const time = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         return `<div class="join-request-card" id="req-${req.id}">
@@ -1010,16 +1036,16 @@ const App = (() => {
     list.innerHTML = html || '<div class="empty-state">No pending requests.</div>';
   }
 
-  async function addPlayerToQueue(requestId, playerId, displayName) {
-    if (!playerId) return toast('Player not linked', 'warning');
-    DB.enqueue(playerId);
+  async function removeFromQueue(requestId, playerId, displayName) {
+    if (!playerId) return toast('Player ID missing', 'warning');
+    DB.dequeue(playerId);
     await Cloud.approveJoinRequest(requestId, playerId);
     if (Cloud.isConnected()) {
       const db = DB.get();
       await Cloud.setQueue(db.queue);
     }
     document.getElementById(`req-${requestId}`)?.remove();
-    toast(`${displayName} added to queue!`, 'success');
+    toast(`${displayName} removed from queue`, 'success');
     render();
   }
 
@@ -1154,6 +1180,7 @@ const App = (() => {
     const name = playerName(playerId, db);
     if (confirm(`Settle ${name}'s full balance of $${balance.toFixed(2)}?`)) {
       DB.clearPlayerBalance(playerId);
+      if (Cloud.isConnected()) Cloud.syncPlayerBalance(playerId, 0);
       toast(`${name}'s balance settled!`, 'success');
       render();
     }
@@ -1265,7 +1292,7 @@ const App = (() => {
     confirmManualMatch, closeAnalysisDialog,
     switchHistoryView,
     showQRCode, closeQRCode,
-    refreshJoinRequests, approveJoinRequest, rejectJoinRequest, addPlayerToQueue,
+    refreshJoinRequests, approveJoinRequest, rejectJoinRequest, addPlayerToQueue, removeFromQueue,
     saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,
