@@ -913,13 +913,22 @@ const App = (() => {
     if (el) {
       el.innerHTML = '';
       if (typeof QRCode !== 'undefined') {
-        new QRCode(el, {
-          text: url, width: 220, height: 220,
-          colorDark: '#ffffff', colorLight: '#1a1a2e',
-          correctLevel: QRCode.CorrectLevel.M,
-        });
+        try {
+          new QRCode(el, {
+            text: url,
+            width: 220,
+            height: 220,
+            colorDark: '#e8eaf6',
+            colorLight: '#1a1a2e',
+            correctLevel: QRCode.CorrectLevel.M,
+          });
+        } catch (e) {
+          el.innerHTML = `<div class="qr-fallback"><a href="${esc(url)}" target="_blank">${esc(url)}</a></div>`;
+        }
       } else {
-        el.innerHTML = `<div class="qr-fallback"><a href="${esc(url)}" target="_blank">${esc(url)}</a></div>`;
+        // Fallback: use Google Charts API to generate QR
+        const encoded = encodeURIComponent(url);
+        el.innerHTML = `<img src="https://chart.googleapis.com/chart?chs=220x220&cht=qr&chl=${encoded}&choe=UTF-8" width="220" height="220" alt="QR Code">`;
       }
     }
     document.getElementById('qr-modal').classList.add('open');
