@@ -577,3 +577,78 @@ input[type="range"]::-webkit-slider-thumb {
   .settings-row { flex-direction: column; align-items: flex-start; gap: 8px; }
   .settings-row input, .settings-row select { width: 100%; }
 }
+
+/* ── Manual Match Builder ─────────────────────────── */
+.mt-24 { margin-top: 24px; }
+
+.manual-match-builder {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.manual-team {
+  flex: 1;
+  min-width: 180px;
+}
+
+.manual-team-label {
+  font-size: .75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.manual-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.manual-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: .9rem;
+}
+
+.manual-slot select {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: .9rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.manual-slot select option { background: var(--bg-card); }
+
+.manual-vs {
+  display: flex;
+  align-items: center;
+  padding-top: 28px;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.manual-court-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}

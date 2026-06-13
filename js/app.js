@@ -141,6 +141,96 @@ const App = (() => {
       && db.courts.some(c => c.status === 'available');
     const btn = document.getElementById('btn-auto-assign');
     if (btn) btn.disabled = !canAssign;
+
+    renderManualMatch(db);
+  }
+
+  function renderManualMatch(db) {
+    const mode = db.settings.gameMode;
+    const teamSize = mode === 'doubles' ? 2 : 1;
+
+    // Build list of available players (not currently in a match)
+    const playingIds = new Set();
+    db.activeMatches.forEach(m => [...m.teamA, ...m.teamB].forEach(id => playingIds.add(id)));
+    const available = db.players.filter(p => !playingIds.has(p.id));
+
+    const playerOptions = available.map(p =>
+      `<option value="${p.id}">${esc(p.name)} (${esc(p.skillLevel)})</option>`
+    ).join('');
+    const emptyOption = `<option value="">— pick player —</option>`;
+
+    // Render team slot selects
+    ['a', 'b'].forEach(team => {
+      const el = document.getElementById(`manual-team-${team}-slots`);
+      if (!el) return;
+      // Preserve current selections
+      const existing = [...el.querySelectorAll('select')].map(s => s.value);
+      el.innerHTML = Array.from({ length: teamSize }, (_, i) => `
+        <div class="manual-slot">
+          <select id="manual-${team}-${i}" onchange="App.renderDashboardManual()">
+            ${emptyOption}${playerOptions}
+          </select>
+        </div>`).join('');
+      // Restore selections
+      existing.forEach((val, i) => {
+        const sel = document.getElementById(`manual-${team}-${i}`);
+        if (sel && val) sel.value = val;
+      });
+    });
+
+    // Court dropdown — only available courts
+    const courtSel = document.getElementById('manual-court');
+    if (courtSel) {
+      const prev = courtSel.value;
+      const availCourts = db.courts.filter(c => c.status === 'available');
+      courtSel.innerHTML = availCourts.length
+        ? availCourts.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')
+        : `<option value="">No courts available</option>`;
+      if (prev && availCourts.find(c => c.id === prev)) courtSel.value = prev;
+    }
+  }
+
+  // Called by select onchange to avoid full re-render resetting selections
+  function renderDashboardManual() {
+    renderManualMatch(DB.get());
+  }
+
+  function startManualMatch() {
+    const db = DB.get();
+    const mode = db.settings.gameMode;
+    const teamSize = mode === 'doubles' ? 2 : 1;
+
+    const teamA = Array.from({ length: teamSize }, (_, i) =>
+      document.getElementById(`manual-a-${i}`)?.value).filter(Boolean);
+    const teamB = Array.from({ length: teamSize }, (_, i) =>
+      document.getElementById(`manual-b-${i}`)?.value).filter(Boolean);
+    const courtId = document.getElementById('manual-court')?.value;
+
+    if (teamA.length < teamSize || teamB.length < teamSize)
+      return toast(`Select ${teamSize} player(s) for each team`, 'warning');
+
+    const allPicked = [...teamA, ...teamB];
+    if (new Set(allPicked).size < allPicked.length)
+      return toast('A player cannot be on both teams', 'warning');
+
+    if (!courtId) return toast('Select a court', 'warning');
+
+    DB.createMatch(courtId, teamA, teamB);
+    toast('Match started!', 'success');
+    render();
+  }
+
+  function clearManualMatch() {
+    renderManualMatch(DB.get());
+    // Reset all selects to empty
+    const db = DB.get();
+    const teamSize = db.settings.gameMode === 'doubles' ? 2 : 1;
+    ['a', 'b'].forEach(team => {
+      Array.from({ length: teamSize }, (_, i) => {
+        const sel = document.getElementById(`manual-${team}-${i}`);
+        if (sel) sel.value = '';
+      });
+    });
   }
 
   function renderPlayers(db) {
@@ -697,6 +787,7 @@ const App = (() => {
     addPlayer, confirmRemovePlayer,
     enqueuePlayer, dequeuePlayer, enqueueAll, clearQueue, moveInQueue,
     autoAssign, openScoreDialog, submitScore, closeScoreDialog,
+    startManualMatch, clearManualMatch, renderDashboardManual,
     saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,
