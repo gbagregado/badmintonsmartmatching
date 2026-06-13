@@ -138,28 +138,44 @@ const Cloud = (() => {
     if (!isConnected()) return null;
     const { data, error } = await supabase
       .from('queue')
-      .select('player_id')
+      .select('player_id, queued_at, games_played_today')
       .order('position');
     if (error) { console.error('[Cloud] getQueue:', error); return null; }
-    return data.map(r => r.player_id);
+    return data.map(r => ({
+      id: r.player_id,
+      joinedAt: new Date(r.queued_at).getTime(),
+      gamesPlayedToday: r.games_played_today || 0,
+    }));
   }
 
-  async function setQueue(playerIds) {
+  async function setQueue(queueEntries) {
     if (!isConnected()) return false;
     await supabase.from('queue').delete().gte('id', 0);
-    if (playerIds.length === 0) return true;
-    const rows = playerIds.map((pid, i) => ({ player_id: pid, position: i }));
+    if (queueEntries.length === 0) return true;
+    const rows = queueEntries.map((entry, i) => ({
+      player_id: typeof entry === 'string' ? entry : entry.id,
+      position: i,
+      queued_at: entry.joinedAt ? new Date(entry.joinedAt).toISOString() : new Date().toISOString(),
+      games_played_today: entry.gamesPlayedToday || 0,
+    }));
     const { error } = await supabase.from('queue').insert(rows);
     if (error) { console.error('[Cloud] setQueue:', error); return false; }
     return true;
   }
 
-  async function enqueue(playerId) {
+  async function enqueue(queueEntry) {
     if (!isConnected()) return false;
     // Get max position
     const { data } = await supabase.from('queue').select('position').order('position', { ascending: false }).limit(1);
     const nextPos = data && data.length > 0 ? data[0].position + 1 : 0;
-    const { error } = await supabase.from('queue').insert({ player_id: playerId, position: nextPos });
+    const playerId = typeof queueEntry === 'string' ? queueEntry : queueEntry.id;
+    const row = {
+      player_id: playerId,
+      position: nextPos,
+      queued_at: queueEntry.joinedAt ? new Date(queueEntry.joinedAt).toISOString() : new Date().toISOString(),
+      games_played_today: queueEntry.gamesPlayedToday || 0,
+    };
+    const { error } = await supabase.from('queue').insert(row);
     if (error) { console.error('[Cloud] enqueue:', error); return false; }
     return true;
   }

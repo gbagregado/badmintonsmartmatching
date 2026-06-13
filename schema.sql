@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS players (
   name TEXT NOT NULL,
   rating INTEGER NOT NULL DEFAULT 1200,
   initial_rating INTEGER NOT NULL DEFAULT 1200,
-  skill_level TEXT NOT NULL DEFAULT 'intermediate'
-    CHECK (skill_level IN ('beginner', 'intermediate', 'advanced', 'expert')),
+  skill_level TEXT NOT NULL DEFAULT 'C'
+    CHECK (skill_level IN ('A+','A','B+','B','C+','C','D+','D','E+','E','F+','F','G')),
   matches_played INTEGER NOT NULL DEFAULT 0,
   wins INTEGER NOT NULL DEFAULT 0,
   losses INTEGER NOT NULL DEFAULT 0,
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS queue (
   player_id UUID NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   position INTEGER NOT NULL,
   queued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  games_played_today INTEGER NOT NULL DEFAULT 0,
   UNIQUE(player_id)
 );
 
