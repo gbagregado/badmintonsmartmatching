@@ -990,15 +990,15 @@ const App = (() => {
     let playerId = selectEl?.value;
 
     if (!playerId) {
-      // Create new player in DB
+      // Create new player in localStorage DB
       DB.addPlayer(displayName, skillLevel);
       const db = DB.get();
       const newPlayer = db.players.find(p => p.name === displayName);
       if (!newPlayer) return toast('Failed to create player', 'danger');
       playerId = newPlayer.id;
-      // Push to Supabase if connected
+      // Push the complete player object to Supabase
       if (Cloud.isConnected()) {
-        await Cloud.addPlayer({ id: playerId, name: displayName, skillLevel, rating: newPlayer.rating, matchesPlayed: 0, wins: 0, losses: 0, streak: 0, totalPointsScored: 0, totalPointsLost: 0 });
+        await Cloud.addPlayer(newPlayer);
       }
       toast(`${displayName} added as new player`, 'success');
     }

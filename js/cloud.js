@@ -247,7 +247,8 @@ const Cloud = (() => {
   async function updateSettings(changes) {
     if (!isConnected()) return false;
     for (const [key, value] of Object.entries(changes)) {
-      await supabase.from('settings').upsert({ key, value });
+      const { error } = await supabase.from('settings').upsert({ key, value: JSON.parse(JSON.stringify(value)) });
+      if (error) console.warn('[Cloud] updateSettings error:', error.message);
     }
     return true;
   }
