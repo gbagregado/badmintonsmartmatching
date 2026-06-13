@@ -19,6 +19,7 @@ const PlayerApp = (() => {
   let ratingHistory = [];
   let pendingReqId = null; // join_request.id while waiting for approval
   let _pollTimer   = null; // polling interval for approval check
+  let hasPendingQueueRequest = false; // local flag for instant UI feedback
 
   // ── Helpers ───────────────────────────────────────────────
   function esc(s) {
@@ -144,7 +145,14 @@ const PlayerApp = (() => {
     queueSub?.unsubscribe?.();
     matchSub?.unsubscribe?.();
     queueSub = PlayerCloud.subscribeQueue(() => {
-      PlayerCloud.getQueue().then(d => { queueRows = d; renderQueueTab(); });
+      PlayerCloud.getQueue().then(d => {
+        queueRows = d;
+        // Clear pending flag once player is actually in the queue
+        if (hasPendingQueueRequest && d.some(r => r.player_id === linkedId)) {
+          hasPendingQueueRequest = false;
+        }
+        renderQueueTab();
+      });
     });
     matchSub = PlayerCloud.subscribeMatches(() => {
       PlayerCloud.getActiveMatches().then(d => { activeMatches = d; renderQueueTab(); });
@@ -282,10 +290,11 @@ const PlayerApp = (() => {
     const el = document.getElementById('tab-queue');
     if (!el || currentTab !== 'queue') return;
 
-    // Check if player has a pending queue request
-    let pendingQueueReq = null;
-    if (linkedId && PlayerCloud.ready()) {
+    // Check if player has a pending queue request (local flag first for instant feedback)
+    let pendingQueueReq = hasPendingQueueRequest ? true : null;
+    if (!pendingQueueReq && linkedId && PlayerCloud.ready()) {
       pendingQueueReq = await PlayerCloud.getMyQueueRequest(deviceId);
+      if (pendingQueueReq) hasPendingQueueRequest = true;
     }
 
     const myPos = linkedId ? queueRows.findIndex(r => r.player_id === linkedId) : -1;
@@ -412,22 +421,36 @@ const PlayerApp = (() => {
       alert('Your account is not linked yet. Wait for the queue master to approve your registration first.');
       return;
     }
-    // Check already in queue
     const alreadyInQueue = queueRows.some(r => r.player_id === linkedId);
     if (alreadyInQueue) {
       alert('You are already in the queue!');
       return;
     }
+
+    // Instant feedback — replace button immediately
+    const btn = document.querySelector('.btn-join');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Sending request…';
+      btn.style.opacity = '0.7';
+    }
+
     const p = playerData;
     PlayerCloud.submitQueueRequest(deviceId, linkedId, profile.displayName, p?.skill_level || profile.skillLevel)
       .then(({ error }) => {
         if (error) {
-          alert('Failed to send request. Please try again.');
+          hasPendingQueueRequest = false;
+          alert('Failed to send request: ' + (error.message || JSON.stringify(error)));
+          renderQueueTab(); // restore button
           return;
         }
-        renderQueueTab();
-        // Show pending state
-        toast('Request sent! Waiting for queue master to add you.');
+        hasPendingQueueRequest = true;
+        // Replace button with pending notice immediately — no need to wait for DB re-query
+        const actionRow = document.querySelector('.action-row');
+        if (actionRow) {
+          actionRow.innerHTML = `<div class="pending-queue-notice">⏳ Queue request sent — waiting for queue master…</div>`;
+        }
+        toast('Request sent! Waiting for queue master.');
       });
   }
 
