@@ -18,6 +18,7 @@ const PlayerApp = (() => {
   let myMatches   = [];
   let ratingHistory = [];
   let pendingReqId = null; // join_request.id while waiting for approval
+  let _pollTimer   = null; // polling interval for approval check
 
   // ── Helpers ───────────────────────────────────────────────
   function esc(s) {
@@ -157,15 +158,35 @@ const PlayerApp = (() => {
         linkedId = row.player_id;
         localStorage.setItem('linkedPlayerId', linkedId);
         reqSub?.unsubscribe?.();
+        clearInterval(_pollTimer);
         await loadAllData();
         bindNav();
         showScreen('screen-main');
         switchTab('queue');
       } else if (row.status === 'rejected') {
         reqSub?.unsubscribe?.();
-        document.getElementById('pending-msg').textContent = '❌ Your request was declined. Please ask the queue master.';
+        clearInterval(_pollTimer);
+        document.getElementById('pending-msg').textContent = '\u274c Your request was declined. Please ask the queue master.';
       }
     });
+    // Polling fallback every 5s in case Realtime filter doesn\'t fire
+    _pollTimer = setInterval(async () => {
+      const req = await PlayerCloud.getMyRequest(deviceId);
+      if (req?.status === 'approved' && req.player_id) {
+        linkedId = req.player_id;
+        localStorage.setItem('linkedPlayerId', linkedId);
+        reqSub?.unsubscribe?.();
+        clearInterval(_pollTimer);
+        await loadAllData();
+        bindNav();
+        showScreen('screen-main');
+        switchTab('queue');
+      } else if (req?.status === 'rejected') {
+        reqSub?.unsubscribe?.();
+        clearInterval(_pollTimer);
+        document.getElementById('pending-msg').textContent = '\u274c Your request was declined. Please ask the queue master.';
+      }
+    }, 5000);
   }
 
   // ── Screen management ─────────────────────────────────────

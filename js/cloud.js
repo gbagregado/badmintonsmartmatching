@@ -57,7 +57,7 @@ const Cloud = (() => {
   async function addPlayer(player) {
     if (!isConnected()) return null;
     const row = mapPlayerToDB(player);
-    const { data, error } = await supabase.from('players').insert(row).select().single();
+    const { data, error } = await supabase.from('players').upsert(row, { onConflict: 'id' }).select().single();
     if (error) { console.error('[Cloud] addPlayer:', error); return null; }
     return mapPlayerFromDB(data);
   }

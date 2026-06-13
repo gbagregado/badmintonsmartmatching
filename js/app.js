@@ -993,10 +993,20 @@ const App = (() => {
       // Create new player in localStorage DB
       DB.addPlayer(displayName, skillLevel);
       const db = DB.get();
-      const newPlayer = db.players.find(p => p.name === displayName);
-      if (!newPlayer) return toast('Failed to create player', 'danger');
+      // Find by name — addPlayer may create duplicates if called twice, so dedup
+      const matches = db.players.filter(p => p.name === displayName);
+      if (!matches.length) return toast('Failed to create player', 'danger');
+      // Use the most recently created one
+      const newPlayer = matches[matches.length - 1];
+      // Remove any accidental duplicates (same name, keep newest)
+      if (matches.length > 1) {
+        DB.update(data => {
+          const keep = newPlayer.id;
+          data.players = data.players.filter(p => p.name !== displayName || p.id === keep);
+        });
+      }
       playerId = newPlayer.id;
-      // Push the complete player object to Supabase
+      // Upsert to Supabase (upsert prevents duplicate if called twice)
       if (Cloud.isConnected()) {
         await Cloud.addPlayer(newPlayer);
       }
