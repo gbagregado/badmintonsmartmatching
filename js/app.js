@@ -1057,6 +1057,16 @@ const App = (() => {
     list.innerHTML = html || '<div class="empty-state">No pending requests.</div>';
   }
 
+  async function addPlayerToQueue(requestId, playerId, displayName) {
+    if (!playerId) return toast('Player not linked', 'warning');
+    DB.enqueue(playerId);
+    await Cloud.approveJoinRequest(requestId, playerId);
+    if (Cloud.isConnected()) await Cloud.setQueue(DB.get().queue);
+    document.getElementById(`req-${requestId}`)?.remove();
+    toast(`${displayName} added to queue!`, 'success');
+    render();
+  }
+
   async function removeFromQueue(requestId, playerId, displayName) {
     if (!playerId) return toast('Player ID missing', 'warning');
     DB.dequeue(playerId);
