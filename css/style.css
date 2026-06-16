@@ -881,6 +881,27 @@ input[type="range"]::-webkit-slider-thumb {
 .queue-req-card { border-left-color: var(--success); }
 .leave-req-card { border-left-color: #fd79a8; }
 
+/* ── Match Request (Set Request) cards ── */
+.match-req-card {
+  background: var(--card-bg); border-radius: 12px; padding: 14px;
+  border-left: 4px solid var(--accent); margin-bottom: 10px;
+}
+.match-req-card.fairness-warning { border-left-color: var(--warning); }
+.match-req-card.fairness-violation { border-left-color: var(--danger); }
+.match-req-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.match-req-teams { font-size: .9rem; font-weight: 600; }
+.match-req-vs { color: var(--text-muted); margin: 0 8px; font-size: .8rem; }
+.match-req-team-a, .match-req-team-b { color: var(--text); }
+.match-req-time { font-size: .75rem; color: var(--text-muted); }
+.match-req-flags { margin-bottom: 8px; }
+.match-req-actions { display: flex; gap: 8px; }
+
+/* ── Fairness flags (shared with player app) ── */
+.fairness-flag { font-size: .78rem; padding: 4px 8px; border-radius: 6px; margin-bottom: 4px; }
+.fairness-flag.warning  { background: rgba(253,203,110,.12); color: #fdcb6e; }
+.fairness-flag.violation { background: rgba(255,118,117,.12); color: #ff7675; }
+.fairness-ok { font-size: .78rem; color: var(--success); }
+
 /* ── QR Code modal ──────────────────────────────────────── */
 .qr-dialog { max-width: 320px; text-align: center; }
 .qr-subtitle { font-size: .83rem; color: var(--text-muted); margin: 6px 0 16px; }

@@ -72,6 +72,15 @@
       <div id="join-requests-list"></div>
     </div>
 
+    <!-- Match Requests Panel -->
+    <div id="match-requests-panel" style="display:none">
+      <div class="section-header">
+        <h3>🎯 Set Requests <span id="match-req-count-badge" class="requests-count-badge">0</span></h3>
+        <button class="btn btn-outline btn-sm" onclick="App.refreshMatchRequests()">↻ Refresh</button>
+      </div>
+      <div id="match-requests-list"></div>
+    </div>
+
     <div class="section-header mt-24">
       <h3>Courts</h3>
       <button id="btn-auto-assign" class="btn btn-primary btn-sm" onclick="App.autoAssign()">
@@ -347,6 +356,7 @@
   <!-- ═══ Scripts ═══ -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/fairness.js"></script>
   <script src="js/cloud.js"></script>
   <script src="js/matchmaker.js"></script>
   <script src="js/seed.js"></script>

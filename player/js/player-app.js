@@ -20,6 +20,12 @@ const PlayerApp = (() => {
   let pendingReqId = null; // join_request.id while waiting for approval
   let _pollTimer   = null; // polling interval for approval check
   let hasPendingQueueRequest = false; // local flag for instant UI feedback
+  // ── Match request state ──
+  let myMatchRequest  = null;  // outgoing match request I created
+  let pendingInvites  = [];    // invites sent to me
+  let myExclusions    = [];    // player IDs I've excluded
+  let inviteSub       = null;
+  let matchReqSub     = null;
 
   // ── Helpers ───────────────────────────────────────────────
   function esc(s) {
@@ -136,6 +142,9 @@ const PlayerApp = (() => {
         myMatches = d.map(annotateMatch);
       }));
       jobs.push(PlayerCloud.getRatingHistory(linkedId).then(d => { ratingHistory = d; }));
+      jobs.push(PlayerCloud.getMyMatchRequest(linkedId).then(d => { myMatchRequest = d; }));
+      jobs.push(PlayerCloud.getMyInvites(linkedId).then(d => { pendingInvites = d; }));
+      jobs.push(PlayerCloud.getExclusions(linkedId).then(d => { myExclusions = d; }));
     }
     await Promise.allSettled(jobs);
     subscribeRealtime();
@@ -157,6 +166,20 @@ const PlayerApp = (() => {
     matchSub = PlayerCloud.subscribeMatches(() => {
       PlayerCloud.getActiveMatches().then(d => { activeMatches = d; renderQueueTab(); });
     });
+    // Invite & match request subscriptions
+    if (linkedId) {
+      inviteSub?.unsubscribe?.();
+      inviteSub = PlayerCloud.subscribeInvites(linkedId, () => {
+        PlayerCloud.getMyInvites(linkedId).then(d => { pendingInvites = d; renderQueueTab(); });
+      });
+    }
+    if (myMatchRequest?.id) {
+      matchReqSub?.unsubscribe?.();
+      matchReqSub = PlayerCloud.subscribeMatchRequest(myMatchRequest.id, payload => {
+        myMatchRequest = payload.new;
+        renderQueueTab();
+      });
+    }
   }
 
   function subscribeForApproval() {
@@ -396,8 +419,48 @@ const PlayerApp = (() => {
         <span class="balance-amount">${balance > 0 ? `₱${balance.toFixed(2)} owed` : 'All clear'}</span>
       </div>` : '';
 
+    // Pending invites (others invited me)
+    const inviteBannersHtml = pendingInvites.map(inv => {
+      const req = inv.match_requests;
+      if (!req) return '';
+      const requester = allPlayers.find(p => p.id === req.requester_id);
+      const tA = (req.team_a || []).map(id => allPlayers.find(p => p.id === id)?.name || '?').join(' & ');
+      const tB = (req.team_b || []).map(id => allPlayers.find(p => p.id === id)?.name || '?').join(' & ');
+      return `<div class="invite-banner">
+        <div class="invite-banner-title">🎯 Set Request from <strong>${esc(requester?.name || '?')}</strong></div>
+        <div class="invite-banner-teams">${esc(tA)} <span style="opacity:.6">vs</span> ${esc(tB)}</div>
+        <div class="invite-banner-actions">
+          <button class="btn-invite-accept" onclick="PlayerApp.respondToInvite('${inv.id}', true)">✓ Accept</button>
+          <button class="btn-invite-decline" onclick="PlayerApp.respondToInvite('${inv.id}', false)">✕ Decline</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // My outgoing match request status
+    let myReqHtml = '';
+    if (myMatchRequest && ['pending_accepts', 'ready'].includes(myMatchRequest.status)) {
+      const invites = myMatchRequest.match_request_invites || [];
+      const allAccepted = invites.length && invites.every(i => i.status === 'accepted');
+      const declined = invites.filter(i => i.status === 'declined');
+      const acceptedCount = invites.filter(i => i.status === 'accepted').length;
+      const tA = (myMatchRequest.team_a || []).map(id => allPlayers.find(p => p.id === id)?.name || '?').join(' & ');
+      const tB = (myMatchRequest.team_b || []).map(id => allPlayers.find(p => p.id === id)?.name || '?').join(' & ');
+      myReqHtml = `<div class="my-set-request">
+        <div class="set-req-title">🎯 Your Set Request</div>
+        <div class="set-req-teams"><strong>${esc(tA)}</strong> <span class="vs-sep">vs</span> <strong>${esc(tB)}</strong></div>
+        <div class="set-req-status">${
+          declined.length ? `❌ Declined — one player declined` :
+          allAccepted ? '✅ All accepted — waiting for queue master' :
+          `⏳ Waiting for accepts (${acceptedCount}/${invites.length})`
+        }</div>
+        <button class="btn-cancel-req" onclick="PlayerApp.cancelMyMatchRequest()">Cancel Request</button>
+      </div>`;
+    }
+
     el.innerHTML = `
       <div class="tab-scroll">
+        ${inviteBannersHtml}
+        ${myReqHtml}
         ${inMatch ? `
           <div class="status-banner playing">
             🎾 You are currently playing!
@@ -428,8 +491,11 @@ const PlayerApp = (() => {
         <div class="action-row">
           ${pendingQueueReq
             ? `<div class="pending-queue-notice">⏳ Queue request sent — waiting for queue master…</div>`
-            : !inQueue && !inMatch
-              ? `<button class="btn-action btn-join" onclick="PlayerApp.requestJoinQueue()">✋ Request to Join Queue</button>`
+            : !inQueue && !inMatch && !myMatchRequest
+              ? `<div class="action-btn-row">
+                  <button class="btn-action btn-join" onclick="PlayerApp.requestJoinQueue()">✋ Join Queue</button>
+                  <button class="btn-action btn-set" onclick="PlayerApp.openSetRequestModal()">🎯 Request a Set</button>
+                </div>`
               : inQueue
                 ? `<button class="btn-action btn-leave" onclick="PlayerApp.requestLeaveQueue()">🚪 Request to Leave Queue</button>`
                 : ''}
@@ -455,6 +521,165 @@ const PlayerApp = (() => {
       <div class="upcoming-players">Based on queue position, you may play with: <strong>${esc(upcoming.join(', '))}</strong></div>
       <div class="upcoming-note">Actual match decided by queue master</div>
     </div>`;
+  }
+
+  // ── Set Request Modal ─────────────────────────────────────
+  // state for the modal
+  let _setReq = { step: 1, partner: null, opp1: null, opp2: null };
+
+  function openSetRequestModal() {
+    if (!linkedId) return toast('Account not linked yet.');
+    if (!PlayerCloud.ready()) return toast('No connection. Try again.');
+    _setReq = { step: 1, partner: null, opp1: null, opp2: null };
+    renderSetModal();
+  }
+
+  function renderSetModal() {
+    let existing = document.getElementById('set-request-modal');
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.id = 'set-request-modal';
+      existing.className = 'set-modal-overlay';
+      document.body.appendChild(existing);
+    }
+    // available players = everyone except me
+    const available = allPlayers.filter(p => p.id !== linkedId && !myExclusions.includes(p.id));
+    const step = _setReq.step;
+    const chosen = [_setReq.partner, _setReq.opp1, _setReq.opp2].filter(Boolean);
+
+    const playerItem = (p, role) => {
+      const sel = (role === 'partner' && _setReq.partner === p.id) ||
+                  (role === 'opp1' && _setReq.opp1 === p.id) ||
+                  (role === 'opp2' && _setReq.opp2 === p.id);
+      const disabled = chosen.includes(p.id) && !sel;
+      return `<div class="set-player-item ${sel ? 'selected' : ''} ${disabled ? 'disabled' : ''}"
+        onclick="PlayerApp._setPickPlayer('${p.id}','${role}')">
+        <span class="set-player-avatar">${esc(p.name.charAt(0).toUpperCase())}</span>
+        <span class="set-player-name">${esc(p.name)}</span>
+        <span class="set-player-level">${esc(p.skill_level || '?')}</span>
+        ${sel ? '<span class="set-player-check">✓</span>' : ''}
+      </div>`;
+    };
+
+    let content = '';
+    if (step === 1) {
+      content = `
+        <div class="set-modal-step-label">Step 1 of 3 — Pick your partner (Team A)</div>
+        <div class="set-player-list">${available.map(p => playerItem(p, 'partner')).join('') || '<div class="empty-note">No other players available.</div>'}</div>
+        <div class="set-modal-actions">
+          <button class="btn-modal-cancel" onclick="PlayerApp.closeSetModal()">Cancel</button>
+          <button class="btn-modal-next" onclick="PlayerApp._setNextStep()" ${_setReq.partner ? '' : 'disabled'}>Next →</button>
+        </div>`;
+    } else if (step === 2) {
+      content = `
+        <div class="set-modal-step-label">Step 2 of 3 — Pick 1st opponent (Team B)</div>
+        <div class="set-player-list">${available.filter(p => p.id !== _setReq.partner).map(p => playerItem(p, 'opp1')).join('')}</div>
+        <div class="set-modal-actions">
+          <button class="btn-modal-cancel" onclick="PlayerApp._setBackStep()">← Back</button>
+          <button class="btn-modal-next" onclick="PlayerApp._setNextStep()" ${_setReq.opp1 ? '' : 'disabled'}>Next →</button>
+        </div>`;
+    } else if (step === 3) {
+      content = `
+        <div class="set-modal-step-label">Step 3 of 3 — Pick 2nd opponent (Team B)</div>
+        <div class="set-player-list">${available.filter(p => p.id !== _setReq.partner && p.id !== _setReq.opp1).map(p => playerItem(p, 'opp2')).join('')}</div>
+        <div class="set-modal-actions">
+          <button class="btn-modal-cancel" onclick="PlayerApp._setBackStep()">← Back</button>
+          <button class="btn-modal-next" onclick="PlayerApp._setNextStep()" ${_setReq.opp2 ? '' : 'disabled'}>Review →</button>
+        </div>`;
+    } else if (step === 4) {
+      const teamA = [linkedId, _setReq.partner];
+      const teamB = [_setReq.opp1, _setReq.opp2];
+      const name = id => allPlayers.find(p => p.id === id)?.name || '?';
+      const tAStr = teamA.map(name).join(' & ');
+      const tBStr = teamB.map(name).join(' & ');
+      // Quick fairness check
+      let flags = null;
+      try {
+        flags = FairnessEngine.analyze({
+          teamA, teamB, allPlayers,
+          recentMatches: activeMatches,
+          queue: queueRows,
+          exclusions: {},
+        });
+      } catch(e) {}
+      const flagsHtml = flags ? FairnessEngine.renderFlags(flags) : '';
+      content = `
+        <div class="set-modal-step-label">Review & Submit</div>
+        <div class="set-review-teams">
+          <div class="set-review-team"><div class="set-review-team-label">Team A</div><div class="set-review-team-names">${esc(tAStr)}</div></div>
+          <div class="set-review-vs">vs</div>
+          <div class="set-review-team"><div class="set-review-team-label">Team B</div><div class="set-review-team-names">${esc(tBStr)}</div></div>
+        </div>
+        <div class="set-fairness-preview">${flagsHtml}</div>
+        <div class="set-modal-actions">
+          <button class="btn-modal-cancel" onclick="PlayerApp._setBackStep()">← Back</button>
+          <button class="btn-modal-submit" onclick="PlayerApp._submitSetRequest()">📨 Send Invites</button>
+        </div>`;
+    }
+
+    existing.innerHTML = `
+      <div class="set-modal">
+        <div class="set-modal-header">🎯 Request a Set</div>
+        ${content}
+      </div>`;
+  }
+
+  function closeSetModal() {
+    document.getElementById('set-request-modal')?.remove();
+  }
+
+  function _setPickPlayer(playerId, role) {
+    if (role === 'partner') _setReq.partner = _setReq.partner === playerId ? null : playerId;
+    else if (role === 'opp1') _setReq.opp1 = _setReq.opp1 === playerId ? null : playerId;
+    else if (role === 'opp2') _setReq.opp2 = _setReq.opp2 === playerId ? null : playerId;
+    renderSetModal();
+  }
+
+  function _setNextStep() { _setReq.step++; renderSetModal(); }
+  function _setBackStep() { _setReq.step--; renderSetModal(); }
+
+  async function _submitSetRequest() {
+    const teamA = [linkedId, _setReq.partner];
+    const teamB = [_setReq.opp1, _setReq.opp2];
+    const inviteeIds = [_setReq.partner, _setReq.opp1, _setReq.opp2].filter(Boolean);
+    const btn = document.querySelector('.btn-modal-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    // Get device IDs for invitees
+    const deviceMap = await PlayerCloud.getPlayerDevices(inviteeIds);
+    const { data, error } = await PlayerCloud.createMatchRequest(linkedId, deviceId, teamA, teamB, deviceMap);
+    if (error) {
+      toast('Failed to send invites: ' + (error.message || JSON.stringify(error)));
+      if (btn) { btn.disabled = false; btn.textContent = '📨 Send Invites'; }
+      return;
+    }
+    myMatchRequest = data;
+    // Subscribe to updates
+    matchReqSub?.unsubscribe?.();
+    matchReqSub = PlayerCloud.subscribeMatchRequest(data.id, payload => {
+      myMatchRequest = payload.new;
+      renderQueueTab();
+    });
+    closeSetModal();
+    toast('Invites sent! Waiting for players to accept.');
+    renderQueueTab();
+  }
+
+  // ── Invite response ───────────────────────────────────────
+  async function respondToInvite(inviteId, accept) {
+    const { error } = await PlayerCloud.respondToInvite(inviteId, accept);
+    if (error) { toast('Error: ' + (error.message || 'Try again')); return; }
+    pendingInvites = pendingInvites.filter(i => i.id !== inviteId);
+    toast(accept ? '✅ Accepted! Waiting for queue master.' : '✕ Declined.');
+    renderQueueTab();
+  }
+
+  async function cancelMyMatchRequest() {
+    if (!myMatchRequest) return;
+    await PlayerCloud.cancelMatchRequest(myMatchRequest.id);
+    myMatchRequest = null;
+    matchReqSub?.unsubscribe?.();
+    toast('Set request cancelled.');
+    renderQueueTab();
   }
 
   function requestJoinQueue() {
@@ -747,7 +972,50 @@ const PlayerApp = (() => {
           <button class="btn-outline-sm" onclick="PlayerApp.editProfile()">✏️ Edit Profile</button>
           <button class="btn-outline-sm danger" onclick="PlayerApp.resetProfile()">🗑 Reset App</button>
         </div>
+
+        <div class="section-block">
+          <h4>🚫 Prefer Not to Play With</h4>
+          <p class="profile-note">Players you add here will be excluded from set requests. The system will flag any QM-assigned match involving them.</p>
+          ${myExclusions.length === 0
+            ? '<div class="empty-note">No exclusions set.</div>'
+            : myExclusions.map(eid => {
+                const p = allPlayers.find(x => x.id === eid);
+                return `<div class="exclusion-row">
+                  <span>${esc(p?.name || eid)}</span>
+                  <span class="exclusion-level">${esc(p?.skill_level || '')}</span>
+                  <button class="btn-exclusion-remove" onclick="PlayerApp.removeExclusion('${eid}')">✕</button>
+                </div>`;
+              }).join('')}
+          <div class="exclusion-add-row">
+            <select id="excl-player-select" class="excl-select">
+              <option value="">— Select player —</option>
+              ${allPlayers
+                .filter(p => p.id !== linkedId && !myExclusions.includes(p.id))
+                .map(p => `<option value="${p.id}">${esc(p.name)} (${esc(p.skill_level)})</option>`)
+                .join('')}
+            </select>
+            <button class="btn-excl-add" onclick="PlayerApp.addExclusion()">+ Add</button>
+          </div>
+        </div>
       </div>`;
+  }
+
+  async function addExclusion() {
+    const sel = document.getElementById('excl-player-select');
+    const excludedId = sel?.value;
+    if (!excludedId) return toast('Select a player first');
+    const { error } = await PlayerCloud.addExclusion(linkedId, excludedId);
+    if (error && error.code !== '23505') { toast('Failed: ' + error.message); return; }
+    myExclusions.push(excludedId);
+    toast('Player added to exclusion list.');
+    renderProfileTab();
+  }
+
+  async function removeExclusion(excludedId) {
+    await PlayerCloud.removeExclusion(linkedId, excludedId);
+    myExclusions = myExclusions.filter(id => id !== excludedId);
+    toast('Removed from exclusion list.');
+    renderProfileTab();
   }
 
   function editProfile() {
@@ -788,6 +1056,10 @@ const PlayerApp = (() => {
     init, bindSetupForm,
     switchTab,
     requestJoinQueue, requestLeaveQueue,
+    openSetRequestModal, closeSetModal,
+    _setPickPlayer, _setNextStep, _setBackStep, _submitSetRequest,
+    respondToInvite, cancelMyMatchRequest,
+    addExclusion, removeExclusion,
     editProfile, resetProfile,
   };
 })();

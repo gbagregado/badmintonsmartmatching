@@ -446,6 +446,38 @@ const Cloud = (() => {
     await supabase.from('players').update({ balance: Math.max(0, parseFloat(balance.toFixed(2))) }).eq('id', playerId);
   }
 
+  // ── Match Requests ────────────────────────────────────────
+  async function getMatchRequests(status = 'ready') {
+    if (!isConnected()) return [];
+    const { data } = await supabase.from('match_requests')
+      .select('*, match_request_invites(*)')
+      .eq('status', status)
+      .order('created_at', { ascending: true });
+    return data || [];
+  }
+
+  async function approveMatchRequest(requestId) {
+    if (!isConnected()) return;
+    await supabase.from('match_requests').update({ status: 'approved' }).eq('id', requestId);
+  }
+
+  async function rejectMatchRequest(requestId) {
+    if (!isConnected()) return;
+    await supabase.from('match_requests').update({ status: 'rejected' }).eq('id', requestId);
+  }
+
+  async function getExclusionsMap() {
+    if (!isConnected()) return {};
+    const { data } = await supabase.from('player_exclusions').select('player_id, excluded_player_id');
+    if (!data) return {};
+    const map = {};
+    for (const row of data) {
+      if (!map[row.player_id]) map[row.player_id] = [];
+      map[row.player_id].push(row.excluded_player_id);
+    }
+    return map;
+  }
+
   return {
     init, isConnected, testConnection,
     onChange, subscribe,
@@ -456,6 +488,7 @@ const Cloud = (() => {
     getSettings, updateSettings,
     getJoinRequests, approveJoinRequest, rejectJoinRequest, saveRatingSnapshot,
     syncPlayerBalance,
+    getMatchRequests, approveMatchRequest, rejectMatchRequest, getExclusionsMap,
     pullAll, pushAll,
   };
 })();

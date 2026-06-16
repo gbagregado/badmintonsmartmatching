@@ -31,7 +31,10 @@ const App = (() => {
       }
       updateSyncBadge(Cloud.isConnected());
       // Load join requests on startup
-      if (Cloud.isConnected()) refreshJoinRequests();
+      if (Cloud.isConnected()) {
+        refreshJoinRequests();
+        refreshMatchRequests();
+      }
     }
 
     const db = DB.get();
@@ -299,6 +302,24 @@ const App = (() => {
     if (ratingGap <= 200 && playingPicked.length === 0) quality = 'good';
     else if (ratingGap <= 400 && playingPicked.length === 0) quality = 'fair';
     else quality = 'poor';
+
+    // ── FairnessEngine supplemental checks (rest, exclusions, frequency) ──
+    try {
+      const exclusions = typeof Cloud !== 'undefined' && Cloud.isConnected
+        ? {} // async — skip here, shown separately in match requests panel
+        : {};
+      const recentForFairness = db.matches.slice(0, 20).map(m => ({
+        team_a: m.teamA, team_b: m.teamB, is_active: false, ended_at: m.endedAt ? new Date(m.endedAt).toISOString() : null,
+      }));
+      const queueForFairness = db.queue.map(q => ({ player_id: q.id, queued_at: new Date(q.joinedAt || 0).toISOString() }));
+      const fe = FairnessEngine.analyze({ teamA, teamB, allPlayers: db.players, recentMatches: recentForFairness, queue: queueForFairness, exclusions });
+      if (fe.rest?.violations?.length) {
+        fe.rest.violations.forEach(v => flags.push({ level: 'warning', icon: '😮‍💨', text: v.message + ' — needs a rest.' }));
+      }
+      if (fe.frequency?.warnings?.length) {
+        fe.frequency.warnings.forEach(w => flags.push({ level: 'warning', icon: '🔁', text: w.message }));
+      }
+    } catch(e) {}
 
     return {
       teamAAvg: avgA, teamBAvg: avgB, ratingGap, quality, flags,
@@ -1049,6 +1070,82 @@ const App = (() => {
     render();
   }
 
+  // ── Match Requests (Set Requests) ────────────────────────
+  async function refreshMatchRequests() {
+    if (!Cloud.isConnected()) return;
+    const requests = await Cloud.getMatchRequests('ready');
+    const badge  = document.getElementById('match-req-count-badge');
+    const panel  = document.getElementById('match-requests-panel');
+    const list   = document.getElementById('match-requests-list');
+
+    if (badge) badge.textContent = requests.length;
+    if (panel) panel.style.display = requests.length > 0 ? 'block' : 'none';
+    if (!list) return;
+    if (!requests.length) { list.innerHTML = ''; return; }
+
+    const db        = DB.get();
+    const exclusions = await Cloud.getExclusionsMap();
+    const recent     = await Cloud.getMatchHistory(20);
+
+    list.innerHTML = requests.map(req => {
+      const teamA = req.team_a || [];
+      const teamB = req.team_b || [];
+      const allInMatch = [...teamA, ...teamB];
+      const names = ids => ids.map(id => { const p = db.players.find(x => x.id === id); return esc(p?.name || id); }).join(' & ');
+      const time  = new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Fairness analysis
+      let flags = null;
+      try {
+        flags = FairnessEngine.analyze({
+          teamA, teamB,
+          allPlayers: db.players,
+          recentMatches: (recent || []).map(m => ({ ...m, team_a: m.teamA || m.team_a, team_b: m.teamB || m.team_b })),
+          queue: db.queue.map(q => ({ player_id: q.id, queued_at: new Date(q.joinedAt || 0).toISOString() })),
+          exclusions,
+        });
+      } catch(e) {}
+
+      const overallClass = flags?.overall === 'violation' ? 'violation' : flags?.overall === 'warning' ? 'warning' : 'ok';
+      const flagsHtml = flags ? FairnessEngine.renderFlags(flags) : '';
+
+      return `<div class="match-req-card fairness-${overallClass}" id="mreq-${req.id}">
+        <div class="match-req-header">
+          <div class="match-req-teams">
+            <span class="match-req-team-a">${names(teamA)}</span>
+            <span class="match-req-vs">vs</span>
+            <span class="match-req-team-b">${names(teamB)}</span>
+          </div>
+          <div class="match-req-time">${time}</div>
+        </div>
+        <div class="match-req-flags">${flagsHtml}</div>
+        <div class="match-req-actions">
+          <button class="btn btn-xs btn-success" onclick="App.approveMatchRequestSet('${req.id}','${teamA.join(',')}','${teamB.join(',')}')">✓ Add to Queue</button>
+          <button class="btn btn-xs btn-danger" onclick="App.rejectMatchRequestSet('${req.id}')">✕ Reject</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function approveMatchRequestSet(requestId, teamAStr, teamBStr) {
+    const teamA = teamAStr.split(',').filter(Boolean);
+    const teamB = teamBStr.split(',').filter(Boolean);
+    const allPlayers = [...teamA, ...teamB];
+    // Add all players to queue (as a set — they come in together)
+    for (const pid of allPlayers) DB.enqueue(pid);
+    await Cloud.approveMatchRequest(requestId);
+    if (Cloud.isConnected()) await Cloud.setQueue(DB.get().queue);
+    document.getElementById(`mreq-${requestId}`)?.remove();
+    toast('Set request approved — players added to queue!', 'success');
+    render();
+  }
+
+  async function rejectMatchRequestSet(requestId) {
+    await Cloud.rejectMatchRequest(requestId);
+    document.getElementById(`mreq-${requestId}`)?.remove();
+    toast('Set request rejected.', 'info');
+  }
+
   async function approveJoinRequest(requestId, displayName, skillLevel) {
     const selectEl = document.getElementById(`link-player-${requestId}`);
     let playerId = selectEl?.value;
@@ -1293,6 +1390,7 @@ const App = (() => {
     switchHistoryView,
     showQRCode, closeQRCode,
     refreshJoinRequests, approveJoinRequest, rejectJoinRequest, addPlayerToQueue, removeFromQueue,
+    refreshMatchRequests, approveMatchRequestSet, rejectMatchRequestSet,
     saveSettings, exportData, importData, resetData,
     pushToCloud, pullFromCloud,
     recordPayment, settlePlayer,

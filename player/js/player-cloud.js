@@ -87,7 +87,6 @@ const PlayerCloud = (() => {
 
   async function submitLeaveRequest(deviceId, playerId, displayName) {
     if (!ready()) return { error: 'Offline' };
-    // Clear any previous pending leave request from this device
     await sb.from('join_requests')
       .delete()
       .eq('device_id', deviceId)
@@ -102,6 +101,140 @@ const PlayerCloud = (() => {
       type: 'queue_leave',
     }).select().single();
     return { data, error };
+  }
+
+  // ── Match Requests ─────────────────────────────────────────
+  async function createMatchRequest(requesterId, requesterDeviceId, teamA, teamB, inviteDeviceMap) {
+    // teamA = [requesterId, partnerId], teamB = [opp1Id, opp2Id]
+    // inviteDeviceMap = { playerId: deviceId } for notification
+    if (!ready()) return { error: 'Offline' };
+    const { data: req, error } = await sb.from('match_requests').insert({
+      requester_id: requesterId,
+      requester_device_id: requesterDeviceId,
+      team_a: teamA,
+      team_b: teamB,
+      status: 'pending_accepts',
+    }).select().single();
+    if (error) return { error };
+
+    // Create invites for non-requester players
+    const invitees = [...teamA, ...teamB].filter(id => id !== requesterId);
+    const inviteRows = invitees.map(pid => ({
+      request_id: req.id,
+      player_id: pid,
+      device_id: inviteDeviceMap[pid] || null,
+      status: 'pending',
+    }));
+    if (inviteRows.length) {
+      const { error: invErr } = await sb.from('match_request_invites').insert(inviteRows);
+      if (invErr) return { error: invErr };
+    }
+    return { data: req };
+  }
+
+  async function getMyMatchRequest(playerId) {
+    if (!ready()) return null;
+    const { data } = await sb.from('match_requests')
+      .select('*, match_request_invites(*)')
+      .eq('requester_id', playerId)
+      .in('status', ['pending_accepts', 'ready'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return data;
+  }
+
+  async function getMyInvites(playerId) {
+    if (!ready()) return [];
+    const { data } = await sb.from('match_request_invites')
+      .select('*, match_requests(*)')
+      .eq('player_id', playerId)
+      .eq('status', 'pending');
+    return data || [];
+  }
+
+  async function respondToInvite(inviteId, accept) {
+    if (!ready()) return { error: 'Offline' };
+    const status = accept ? 'accepted' : 'declined';
+    const { error } = await sb.from('match_request_invites')
+      .update({ status, responded_at: new Date().toISOString() })
+      .eq('id', inviteId);
+    if (error) return { error };
+
+    // Check if all invites for this request are now accepted
+    const { data: invite } = await sb.from('match_request_invites').select('request_id').eq('id', inviteId).maybeSingle();
+    if (invite?.request_id) {
+      if (!accept) {
+        // One declined → whole request is rejected
+        await sb.from('match_requests').update({ status: 'rejected' }).eq('id', invite.request_id);
+      } else {
+        // Check if all accepted
+        const { data: allInvites } = await sb.from('match_request_invites').select('status').eq('request_id', invite.request_id);
+        if (allInvites && allInvites.every(i => i.status === 'accepted')) {
+          await sb.from('match_requests').update({ status: 'ready' }).eq('id', invite.request_id);
+        }
+      }
+    }
+    return { ok: true };
+  }
+
+  async function cancelMatchRequest(requestId) {
+    if (!ready()) return;
+    await sb.from('match_requests').update({ status: 'rejected' }).eq('id', requestId);
+  }
+
+  function subscribeInvites(playerId, callback) {
+    if (!ready()) return null;
+    return sb.channel('player-invites-' + playerId)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'match_request_invites',
+        filter: `player_id=eq.${playerId}`,
+      }, callback)
+      .subscribe();
+  }
+
+  function subscribeMatchRequest(requestId, callback) {
+    if (!ready()) return null;
+    return sb.channel('matchreq-' + requestId)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'match_requests',
+        filter: `id=eq.${requestId}`,
+      }, callback)
+      .subscribe();
+  }
+
+  // ── Exclusions ─────────────────────────────────────────────
+  async function getExclusions(playerId) {
+    if (!ready()) return [];
+    const { data } = await sb.from('player_exclusions')
+      .select('excluded_player_id')
+      .eq('player_id', playerId);
+    return (data || []).map(r => r.excluded_player_id);
+  }
+
+  async function addExclusion(playerId, excludedId) {
+    if (!ready()) return { error: 'Offline' };
+    const { error } = await sb.from('player_exclusions').insert({
+      player_id: playerId, excluded_player_id: excludedId,
+    }).select().single();
+    return { error };
+  }
+
+  async function removeExclusion(playerId, excludedId) {
+    if (!ready()) return;
+    await sb.from('player_exclusions')
+      .delete()
+      .eq('player_id', playerId)
+      .eq('excluded_player_id', excludedId);
+  }
+
+  // ── Device lookup (for invite notifications) ───────────────
+  async function getPlayerDevices(playerIds) {
+    if (!ready()) return {};
+    const { data } = await sb.from('player_devices').select('player_id, device_id').in('player_id', playerIds);
+    const map = {};
+    for (const row of (data || [])) map[row.player_id] = row.device_id;
+    return map;
   }
 
   // ── Player data ───────────────────────────────────────────
@@ -204,6 +337,9 @@ const PlayerCloud = (() => {
     getLinkedPlayerId, linkDevice,
     submitJoinRequest, getMyRequest,
     submitQueueRequest, getMyQueueRequest, submitLeaveRequest,
+    createMatchRequest, getMyMatchRequest, getMyInvites, respondToInvite,
+    cancelMatchRequest, subscribeInvites, subscribeMatchRequest,
+    getExclusions, addExclusion, removeExclusion, getPlayerDevices,
     getPlayer, getAllPlayers,
     getQueue, getActiveMatches, getPlayerMatches, getCompletedMatchCount,
     getRatingHistory,
